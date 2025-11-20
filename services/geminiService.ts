@@ -1,8 +1,35 @@
 import { GoogleGenAI, Type } from '@google/genai';
 
+// Robust Environment Variable Helper
+// Checks process.env (Node/CRA) and import.meta.env (Vite/Vercel)
+// Also checks for VITE_ prefixed keys automatically
+const getEnv = (key: string): string => {
+  let val = '';
+  
+  // 1. Try standard process.env (if defined)
+  try {
+    if (typeof process !== 'undefined' && process.env) {
+      val = process.env[key] || process.env[`VITE_${key}`] || process.env[`REACT_APP_${key}`] || '';
+    }
+  } catch (e) {}
+
+  if (val) return val;
+
+  // 2. Try import.meta.env (Vite standard)
+  try {
+    // @ts-ignore
+    if (import.meta && import.meta.env) {
+      // @ts-ignore
+      val = import.meta.env[key] || import.meta.env[`VITE_${key}`] || '';
+    }
+  } catch (e) {}
+
+  return val;
+};
+
 // Prioritize specific keys, fallback to generic API_KEY
-const textKey = process.env.TEXT_API_KEY || process.env.API_KEY || '';
-const imageKey = process.env.IMAGE_API_KEY || process.env.API_KEY || '';
+const textKey = getEnv('TEXT_API_KEY') || getEnv('API_KEY') || '';
+const imageKey = getEnv('IMAGE_API_KEY') || getEnv('API_KEY') || '';
 
 // Create separate instances for Text and Image operations
 const textAI = new GoogleGenAI({ apiKey: textKey });
@@ -10,7 +37,10 @@ const imageAI = new GoogleGenAI({ apiKey: imageKey });
 
 // --- Dictionary & Note Taking ---
 export const queryDictionary = async (userInput: string) => {
-  if (!textKey) throw new Error("No Text API Key provided");
+  if (!textKey) {
+      console.error("Missing API Key");
+      return null;
+  }
 
   // Use textAI for text generation
   const response = await textAI.models.generateContent({
