@@ -1,13 +1,19 @@
 import { GoogleGenAI, Type } from '@google/genai';
 
-const apiKey = process.env.API_KEY || '';
-const ai = new GoogleGenAI({ apiKey });
+// Prioritize specific keys, fallback to generic API_KEY
+const textKey = process.env.TEXT_API_KEY || process.env.API_KEY || '';
+const imageKey = process.env.IMAGE_API_KEY || process.env.API_KEY || '';
+
+// Create separate instances for Text and Image operations
+const textAI = new GoogleGenAI({ apiKey: textKey });
+const imageAI = new GoogleGenAI({ apiKey: imageKey });
 
 // --- Dictionary & Note Taking ---
 export const queryDictionary = async (userInput: string) => {
-  if (!apiKey) throw new Error("No API Key provided");
+  if (!textKey) throw new Error("No Text API Key provided");
 
-  const response = await ai.models.generateContent({
+  // Use textAI for text generation
+  const response = await textAI.models.generateContent({
     model: 'gemini-2.5-flash',
     contents: `User query: "${userInput}". 
     Identify the main target English word or phrase the user is asking about. 
@@ -34,10 +40,11 @@ export const queryDictionary = async (userInput: string) => {
 
 // --- Image Generation for Flashcards ---
 export const generateCardImage = async (word: string, context?: string): Promise<string> => {
-  if (!apiKey) return `https://picsum.photos/seed/${word}/400/300`; 
+  // Use imageAI for image generation
+  if (!imageKey) return `https://picsum.photos/seed/${word}/400/300`; 
 
   try {
-    const response = await ai.models.generateImages({
+    const response = await imageAI.models.generateImages({
         model: 'imagen-4.0-generate-001',
         prompt: `A simple, cute, clear vector-style illustration of the concept "${word}". Context: ${context}. White background, minimalistic, flat design, suitable for language learning cards.`,
         config: {
@@ -61,7 +68,7 @@ export const generateCardImage = async (word: string, context?: string): Promise
 
 // --- Pet Visuals ---
 export const generatePetSprite = async (stage: number): Promise<string> => {
-    if (!apiKey) return '';
+    if (!imageKey) return '';
     
     let description = '';
     switch(stage) {
@@ -73,7 +80,8 @@ export const generatePetSprite = async (stage: number): Promise<string> => {
     }
 
     try {
-        const response = await ai.models.generateImages({
+        // Use imageAI
+        const response = await imageAI.models.generateImages({
             model: 'imagen-4.0-generate-001',
             prompt: `A high-quality 3D render of ${description}. Theme: Warm Yellow, Buttercream, and Gold colors. Pixar style, soft studio lighting, cute, round shapes, matte finish, plain white background, isometric view.`,
             config: {
@@ -96,7 +104,7 @@ export const generatePetReaction = async (
   stats: any, 
   trigger: 'greeting' | 'completed_task' | 'evolving' | 'traveling'
 ) => {
-  if (!apiKey) return { text: "Pika pika!", mood: "happy" };
+  if (!textKey) return { text: "Pika pika!", mood: "happy" };
 
   const prompt = `
     You are a virtual pet named ${petState.name}.
@@ -107,7 +115,8 @@ export const generatePetReaction = async (
   `;
 
   try {
-    const response = await ai.models.generateContent({
+    // Use textAI
+    const response = await textAI.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
       config: {
@@ -128,9 +137,10 @@ export const generatePetReaction = async (
 };
 
 export const generatePostcard = async (petName: string): Promise<string> => {
-    if (!apiKey) return `https://picsum.photos/seed/travel/600/400`;
+    if (!imageKey) return `https://picsum.photos/seed/travel/600/400`;
     try {
-        const response = await ai.models.generateImages({
+        // Use imageAI
+        const response = await imageAI.models.generateImages({
             model: 'imagen-4.0-generate-001',
             prompt: `A watercolor postcard of a cute yellow/cream mascot named ${petName} in a beautiful travel location.`,
             config: { numberOfImages: 1, aspectRatio: '16:9' }
