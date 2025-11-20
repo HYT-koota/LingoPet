@@ -31,6 +31,10 @@ const getEnv = (key: string): string => {
 const textKey = getEnv('TEXT_API_KEY') || getEnv('API_KEY') || '';
 const imageKey = getEnv('IMAGE_API_KEY') || getEnv('API_KEY') || '';
 
+// Allow Model Configuration via Env Vars (with safe defaults)
+const TEXT_MODEL = getEnv('TEXT_MODEL') || 'gemini-2.5-flash';
+const IMAGE_MODEL = getEnv('IMAGE_MODEL') || 'imagen-3.0-generate-001';
+
 // Create separate instances for Text and Image operations
 const textAI = new GoogleGenAI({ apiKey: textKey });
 const imageAI = new GoogleGenAI({ apiKey: imageKey });
@@ -42,30 +46,35 @@ export const queryDictionary = async (userInput: string) => {
       return null;
   }
 
-  // Use textAI for text generation
-  const response = await textAI.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: `User query: "${userInput}". 
-    Identify the main target English word or phrase the user is asking about. 
-    Provide a simple definition suitable for a learner.
-    Provide a short example sentence.
-    Return JSON.`,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          identifiedWord: { type: Type.STRING, description: "The core word being asked about, e.g., 'attention'" },
-          definition: { type: Type.STRING, description: "A concise dictionary definition" },
-          example: { type: Type.STRING, description: "A usage example sentence" },
-          translation: { type: Type.STRING, description: "Chinese translation of the word" }
-        },
-        required: ["identifiedWord", "definition", "example", "translation"]
-      }
-    }
-  });
+  try {
+      // Use textAI for text generation
+      const response = await textAI.models.generateContent({
+        model: TEXT_MODEL,
+        contents: `User query: "${userInput}". 
+        Identify the main target English word or phrase the user is asking about. 
+        Provide a simple definition suitable for a learner.
+        Provide a short example sentence.
+        Return JSON.`,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              identifiedWord: { type: Type.STRING, description: "The core word being asked about, e.g., 'attention'" },
+              definition: { type: Type.STRING, description: "A concise dictionary definition" },
+              example: { type: Type.STRING, description: "A usage example sentence" },
+              translation: { type: Type.STRING, description: "Chinese translation of the word" }
+            },
+            required: ["identifiedWord", "definition", "example", "translation"]
+          }
+        }
+      });
 
-  return response.text ? JSON.parse(response.text) : null;
+      return response.text ? JSON.parse(response.text) : null;
+  } catch (e) {
+      console.error("Dictionary Query Failed:", e);
+      return null;
+  }
 };
 
 // --- Image Generation for Flashcards ---
@@ -75,7 +84,7 @@ export const generateCardImage = async (word: string, context?: string): Promise
 
   try {
     const response = await imageAI.models.generateImages({
-        model: 'imagen-4.0-generate-001',
+        model: IMAGE_MODEL,
         prompt: `A simple, cute, clear vector-style illustration of the concept "${word}". Context: ${context}. White background, minimalistic, flat design, suitable for language learning cards.`,
         config: {
             numberOfImages: 1,
@@ -112,7 +121,7 @@ export const generatePetSprite = async (stage: number): Promise<string> => {
     try {
         // Use imageAI
         const response = await imageAI.models.generateImages({
-            model: 'imagen-4.0-generate-001',
+            model: IMAGE_MODEL,
             prompt: `A high-quality 3D render of ${description}. Theme: Warm Yellow, Buttercream, and Gold colors. Pixar style, soft studio lighting, cute, round shapes, matte finish, plain white background, isometric view.`,
             config: {
                 numberOfImages: 1,
@@ -147,7 +156,7 @@ export const generatePetReaction = async (
   try {
     // Use textAI
     const response = await textAI.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: TEXT_MODEL,
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -171,7 +180,7 @@ export const generatePostcard = async (petName: string): Promise<string> => {
     try {
         // Use imageAI
         const response = await imageAI.models.generateImages({
-            model: 'imagen-4.0-generate-001',
+            model: IMAGE_MODEL,
             prompt: `A watercolor postcard of a cute yellow/cream mascot named ${petName} in a beautiful travel location.`,
             config: { numberOfImages: 1, aspectRatio: '16:9' }
         });
