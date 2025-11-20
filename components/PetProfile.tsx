@@ -1,6 +1,7 @@
 import React from 'react';
 import { PetState, PetStage } from '../types';
-import { Trophy, BookOpen, MapPin, Star } from 'lucide-react';
+import { Trophy, BookOpen, MapPin, Star, Activity } from 'lucide-react';
+import { CURRENT_CONFIG } from '../services/geminiService';
 
 interface PetProfileProps {
   pet: PetState;
@@ -75,7 +76,7 @@ const PetProfile: React.FC<PetProfileProps> = ({ pet }) => {
        </div>
 
        {/* Rules (Chinese) */}
-       <div className="bg-white/80 p-6 rounded-3xl border border-brand-50">
+       <div className="bg-white/80 p-6 rounded-3xl border border-brand-50 mb-6">
            <h3 className="font-bold text-gray-800 mb-3">成长规则 (Growth Rules)</h3>
            <ul className="text-sm text-gray-600 space-y-2 list-disc pl-4">
                <li><span className="font-bold">每日学习：</span> 添加新单词 (+10 XP)。</li>
@@ -83,6 +84,33 @@ const PetProfile: React.FC<PetProfileProps> = ({ pet }) => {
                <li><span className="font-bold">进化：</span> 当 XP 达到特定值时，我会进化成新的形态。</li>
                <li><span className="font-bold">旅行：</span> 成年后我会去世界各地旅行，并给你寄明信片！</li>
            </ul>
+       </div>
+
+       {/* System Diagnostics - Hidden Debugger */}
+       <div className="bg-gray-100 p-4 rounded-xl text-xs font-mono text-gray-500">
+            <h3 className="font-bold mb-2 flex items-center gap-1"><Activity size={12}/> SYSTEM DIAGNOSTICS</h3>
+            <div className="grid grid-cols-2 gap-2">
+                <div>
+                    <span className="block opacity-50">API Key Status:</span>
+                    <span className={CURRENT_CONFIG.hasTextKey ? "text-green-600 font-bold" : "text-red-500 font-bold"}>
+                        {CURRENT_CONFIG.hasTextKey ? "✅ Configured" : "❌ Missing"}
+                    </span>
+                </div>
+                 <div>
+                    <span className="block opacity-50">Text Model:</span>
+                    <span className="text-gray-700">{CURRENT_CONFIG.textModel}</span>
+                </div>
+                <div>
+                    <span className="block opacity-50">Image Key Status:</span>
+                     <span className={CURRENT_CONFIG.hasImageKey ? "text-green-600 font-bold" : "text-red-500 font-bold"}>
+                        {CURRENT_CONFIG.hasImageKey ? "✅ Configured" : "❌ Missing"}
+                    </span>
+                </div>
+                 <div>
+                    <span className="block opacity-50">Image Model:</span>
+                    <span className="text-gray-700">{CURRENT_CONFIG.imageModel}</span>
+                </div>
+            </div>
        </div>
     </div>
   );

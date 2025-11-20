@@ -71,9 +71,10 @@ const Dictionary: React.FC<DictionaryProps> = ({ onWordAdded }) => {
         setAdded(true);
         onWordAdded();
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Dictionary error", error);
-      alert("Failed to get definition. Check API Key.");
+      // Explicitly alert the user with the error message to help debug Vercel config
+      alert(`Error: ${error.message || "Unknown API Error"}\n\nPlease check your API Key and Model Name in Vercel Settings.`);
     } finally {
       setIsLoading(false);
     }

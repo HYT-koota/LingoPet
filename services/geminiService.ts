@@ -35,15 +35,23 @@ const imageKey = getEnv('IMAGE_API_KEY') || getEnv('API_KEY') || '';
 const TEXT_MODEL = getEnv('TEXT_MODEL') || 'gemini-2.5-flash';
 const IMAGE_MODEL = getEnv('IMAGE_MODEL') || 'imagen-3.0-generate-001';
 
+// Export config for UI Diagnostics
+export const CURRENT_CONFIG = {
+    textModel: TEXT_MODEL,
+    imageModel: IMAGE_MODEL,
+    hasTextKey: !!textKey,
+    hasImageKey: !!imageKey
+};
+
 // Create separate instances for Text and Image operations
-const textAI = new GoogleGenAI({ apiKey: textKey });
-const imageAI = new GoogleGenAI({ apiKey: imageKey });
+// We only instantiate if keys exist to avoid immediate crashes on load
+const textAI = textKey ? new GoogleGenAI({ apiKey: textKey }) : null;
+const imageAI = imageKey ? new GoogleGenAI({ apiKey: imageKey }) : null;
 
 // --- Dictionary & Note Taking ---
 export const queryDictionary = async (userInput: string) => {
-  if (!textKey) {
-      console.error("Missing API Key");
-      return null;
+  if (!textAI) {
+      throw new Error("API Key is missing. Please check Vercel Environment Variables (API_KEY or TEXT_API_KEY).");
   }
 
   try {
@@ -70,17 +78,19 @@ export const queryDictionary = async (userInput: string) => {
         }
       });
 
-      return response.text ? JSON.parse(response.text) : null;
-  } catch (e) {
+      if (!response.text) throw new Error("Empty response from AI");
+      return JSON.parse(response.text);
+  } catch (e: any) {
       console.error("Dictionary Query Failed:", e);
-      return null;
+      // Re-throw to let UI handle the alert
+      throw new Error(e.message || "Failed to fetch definition");
   }
 };
 
 // --- Image Generation for Flashcards ---
 export const generateCardImage = async (word: string, context?: string): Promise<string> => {
   // Use imageAI for image generation
-  if (!imageKey) return `https://picsum.photos/seed/${word}/400/300`; 
+  if (!imageAI) return `https://picsum.photos/seed/${word}/400/300`; 
 
   try {
     const response = await imageAI.models.generateImages({
@@ -107,7 +117,7 @@ export const generateCardImage = async (word: string, context?: string): Promise
 
 // --- Pet Visuals ---
 export const generatePetSprite = async (stage: number): Promise<string> => {
-    if (!imageKey) return '';
+    if (!imageAI) return '';
     
     let description = '';
     switch(stage) {
@@ -143,7 +153,7 @@ export const generatePetReaction = async (
   stats: any, 
   trigger: 'greeting' | 'completed_task' | 'evolving' | 'traveling'
 ) => {
-  if (!textKey) return { text: "Pika pika!", mood: "happy" };
+  if (!textAI) return { text: "Pika pika!", mood: "happy" };
 
   const prompt = `
     You are a virtual pet named ${petState.name}.
@@ -176,7 +186,7 @@ export const generatePetReaction = async (
 };
 
 export const generatePostcard = async (petName: string): Promise<string> => {
-    if (!imageKey) return `https://picsum.photos/seed/travel/600/400`;
+    if (!imageAI) return `https://picsum.photos/seed/travel/600/400`;
     try {
         // Use imageAI
         const response = await imageAI.models.generateImages({
