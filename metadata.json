@@ -1,0 +1,7 @@
+{
+  "name": "LingoPet Companion",
+  "description": "A cute, gamified language learning assistant that combines a smart dictionary, spaced repetition flashcards, and an evolving desktop pet.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

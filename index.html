@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LingoPet Companion</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          fontFamily: {
+            sans: ['Nunito', 'sans-serif'],
+          },
+          extend: {
+            colors: {
+              brand: {
+                50: '#FFFBF0',
+                100: '#FFEFC2',
+                200: '#FFE094',
+                300: '#FFCF66',
+                400: '#FFBF38',
+                500: '#FFAE0A', // Primary generic yellow/orange
+                600: '#E69500',
+                700: '#B37400',
+                800: '#855600',
+              },
+              teal: {
+                400: '#2DD4BF',
+                500: '#14B8A6',
+                600: '#0D9488',
+              },
+              coral: {
+                400: '#FB7185',
+                500: '#F43F5E',
+              }
+            },
+            animation: {
+              'bounce-slow': 'bounce 3s infinite',
+              'float': 'float 6s ease-in-out infinite',
+              'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'wiggle': 'wiggle 1s ease-in-out infinite',
+              'pop': 'pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+            },
+            keyframes: {
+              wiggle: {
+                '0%, 100%': { transform: 'rotate(-3deg)' },
+                '50%': { transform: 'rotate(3deg)' },
+              },
+              float: {
+                '0%, 100%': { transform: 'translateY(0)' },
+                '50%': { transform: 'translateY(-10px)' },
+              },
+              pop: {
+                '0%': { transform: 'scale(0.9)', opacity: '0' },
+                '100%': { transform: 'scale(1)', opacity: '1' },
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      /* Custom scrollbar for cleanliness */
+      ::-webkit-scrollbar {
+        width: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent; 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #e5e7eb; 
+        border-radius: 3px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #d1d5db; 
+      }
+      
+      /* Dot pattern background */
+      .bg-dot-pattern {
+        background-image: radial-gradient(#E5E7EB 1px, transparent 1px);
+        background-size: 20px 20px;
+      }
+
+      /* Glassmorphism utility */
+      .glass {
+        background: rgba(255, 255, 255, 0.7);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.5);
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react-dom/client": "https://aistudiocdn.com/react-dom@^19.2.0/client",
+    "react-dom": "https://aistudiocdn.com/react-dom@^19.2.0",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.554.0",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/"
+  }
+}
+</script>
+</head>
+  <body class="bg-brand-50 text-gray-800 font-sans antialiased h-screen overflow-hidden selection:bg-brand-200 bg-dot-pattern">
+    <div id="root" class="h-full w-full"></div>
+  </body>
+</html>
