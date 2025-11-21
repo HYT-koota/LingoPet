@@ -1,23 +1,21 @@
 import { GoogleGenAI, Type } from '@google/genai';
 
 // CRITICAL FIX FOR VERCEL/VITE:
-// We must access import.meta.env.VITE_XXX properties DIRECTLY/EXPLICITLY.
-// Dynamic access (e.g. env[`VITE_${key}`]) usually fails during build time replacement.
-
-// @ts-ignore
-const ENV = import.meta.env || {};
+// We must access import.meta.env.VITE_XXX properties DIRECTLY (verbatim).
+// Do NOT destructure 'env' or use dynamic string access.
+// Vite uses static string replacement at build time.
 
 // 1. Get API Keys (Try specific first, then generic)
 // @ts-ignore
-const textKey = ENV.VITE_TEXT_API_KEY || ENV.VITE_API_KEY || '';
+const textKey = import.meta.env.VITE_TEXT_API_KEY || import.meta.env.VITE_API_KEY || '';
 // @ts-ignore
-const imageKey = ENV.VITE_IMAGE_API_KEY || ENV.VITE_API_KEY || '';
+const imageKey = import.meta.env.VITE_IMAGE_API_KEY || import.meta.env.VITE_API_KEY || '';
 
 // 2. Get Models
 // @ts-ignore
-const TEXT_MODEL = ENV.VITE_TEXT_MODEL || 'gemini-2.5-flash';
+const TEXT_MODEL = import.meta.env.VITE_TEXT_MODEL || 'gemini-2.5-flash';
 // @ts-ignore
-const IMAGE_MODEL = ENV.VITE_IMAGE_MODEL || 'imagen-3.0-generate-001';
+const IMAGE_MODEL = import.meta.env.VITE_IMAGE_MODEL || 'imagen-3.0-generate-001';
 
 // Export config for UI Diagnostics
 export const CURRENT_CONFIG = {
@@ -35,7 +33,7 @@ const imageAI = imageKey ? new GoogleGenAI({ apiKey: imageKey }) : null;
 // --- Dictionary & Note Taking ---
 export const queryDictionary = async (userInput: string) => {
   if (!textAI) {
-      throw new Error("API Key is missing. Please check Vercel Settings. Key must be named 'VITE_API_KEY'.");
+      throw new Error("API Key is missing. Please check Vercel Settings > Environment Variables. Key must be named 'VITE_API_KEY'.");
   }
 
   try {
