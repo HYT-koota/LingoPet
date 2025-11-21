@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { PetState, PetStage } from '../types';
-import { Trophy, BookOpen, MapPin, Star, Activity } from 'lucide-react';
+import { Trophy, BookOpen, MapPin, Star, Activity, HelpCircle } from 'lucide-react';
 import { CURRENT_CONFIG } from '../services/geminiService';
 
 interface PetProfileProps {
@@ -8,6 +8,8 @@ interface PetProfileProps {
 }
 
 const PetProfile: React.FC<PetProfileProps> = ({ pet }) => {
+  const [showHelp, setShowHelp] = useState(false);
+  
   const stages = [
     { id: PetStage.EGG, label: 'Egg', desc: 'Waiting to hatch' },
     { id: PetStage.BABY, label: 'Baby', desc: 'Needs 100 XP' },
@@ -16,7 +18,7 @@ const PetProfile: React.FC<PetProfileProps> = ({ pet }) => {
   ];
 
   return (
-    <div className="h-full w-full overflow-y-auto px-6 py-6 bg-brand-50/50">
+    <div className="h-full w-full overflow-y-auto px-6 py-6 bg-brand-50/50 relative">
        <div className="mb-8">
            <h1 className="text-3xl font-extrabold text-brand-800">Pet Journey</h1>
            <p className="text-brand-600">Cycle {pet.cycle} • {pet.name}</p>
@@ -86,9 +88,15 @@ const PetProfile: React.FC<PetProfileProps> = ({ pet }) => {
            </ul>
        </div>
 
-       {/* System Diagnostics - Hidden Debugger */}
-       <div className="bg-gray-100 p-4 rounded-xl text-xs font-mono text-gray-500">
-            <h3 className="font-bold mb-2 flex items-center gap-1"><Activity size={12}/> SYSTEM DIAGNOSTICS</h3>
+       {/* System Diagnostics */}
+       <div className="bg-gray-100 p-4 rounded-xl text-xs font-mono text-gray-500 relative">
+            <div className="flex justify-between items-start mb-2">
+                <h3 className="font-bold flex items-center gap-1"><Activity size={12}/> SYSTEM DIAGNOSTICS</h3>
+                <button onClick={() => setShowHelp(true)} className="text-brand-500 font-bold flex items-center gap-1 hover:underline cursor-pointer">
+                    <HelpCircle size={12}/> Fix Issues?
+                </button>
+            </div>
+            
             <div className="grid grid-cols-2 gap-2">
                 <div>
                     <span className="block opacity-50">API Key Status:</span>
@@ -112,6 +120,36 @@ const PetProfile: React.FC<PetProfileProps> = ({ pet }) => {
                 </div>
             </div>
        </div>
+
+       {/* Vercel Help Modal */}
+       {showHelp && (
+           <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-6" onClick={() => setShowHelp(false)}>
+               <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl" onClick={e => e.stopPropagation()}>
+                   <h2 className="text-xl font-bold mb-4">How to configure Vercel</h2>
+                   <p className="text-sm text-gray-600 mb-4">Vercel requires environment variables to start with <code>VITE_</code> to be visible in the browser.</p>
+                   
+                   <div className="bg-gray-50 p-3 rounded-lg text-xs font-mono space-y-2 mb-4 border border-gray-200">
+                       <div className="flex justify-between">
+                           <span className="text-gray-400">Key:</span>
+                           <span className="font-bold text-brand-600">VITE_API_KEY</span>
+                       </div>
+                       <div className="flex justify-between">
+                           <span className="text-gray-400">Value:</span>
+                           <span>(Your Google API Key)</span>
+                       </div>
+                   </div>
+
+                   <p className="text-xs text-gray-500 mb-6">Go to Vercel &gt; Settings &gt; Environment Variables, edit your key name to match above, then <strong>Redeploy</strong>.</p>
+                   
+                   <button 
+                       onClick={() => setShowHelp(false)}
+                       className="w-full bg-brand-500 text-white font-bold py-3 rounded-xl"
+                   >
+                       Got it
+                   </button>
+               </div>
+           </div>
+       )}
     </div>
   );
 };

@@ -187,7 +187,7 @@ const App: React.FC = () => {
                 {pet.stage !== PetStage.ADULT && (
                     <div>
                         <h1 className="font-extrabold text-brand-800 leading-tight">LingoPet</h1>
-                        <p className="text-[10px] font-bold text-brand-400 uppercase tracking-wide">Cycle {pet.cycle} • v1.0</p>
+                        <p className="text-[10px] font-bold text-brand-400 uppercase tracking-wide">Cycle {pet.cycle} • v1.1</p>
                     </div>
                 )}
              </div>

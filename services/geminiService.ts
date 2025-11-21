@@ -1,39 +1,23 @@
 import { GoogleGenAI, Type } from '@google/genai';
 
-// Robust Environment Variable Helper
-// Checks process.env (Node/CRA) and import.meta.env (Vite/Vercel)
-// Also checks for VITE_ prefixed keys automatically
-const getEnv = (key: string): string => {
-  let val = '';
-  
-  // 1. Try standard process.env (if defined)
-  try {
-    if (typeof process !== 'undefined' && process.env) {
-      val = process.env[key] || process.env[`VITE_${key}`] || process.env[`REACT_APP_${key}`] || '';
-    }
-  } catch (e) {}
+// CRITICAL FIX FOR VERCEL/VITE:
+// We must access import.meta.env.VITE_XXX properties DIRECTLY/EXPLICITLY.
+// Dynamic access (e.g. env[`VITE_${key}`]) usually fails during build time replacement.
 
-  if (val) return val;
+// @ts-ignore
+const ENV = import.meta.env || {};
 
-  // 2. Try import.meta.env (Vite standard)
-  try {
-    // @ts-ignore
-    if (import.meta && import.meta.env) {
-      // @ts-ignore
-      val = import.meta.env[key] || import.meta.env[`VITE_${key}`] || '';
-    }
-  } catch (e) {}
+// 1. Get API Keys (Try specific first, then generic)
+// @ts-ignore
+const textKey = ENV.VITE_TEXT_API_KEY || ENV.VITE_API_KEY || '';
+// @ts-ignore
+const imageKey = ENV.VITE_IMAGE_API_KEY || ENV.VITE_API_KEY || '';
 
-  return val;
-};
-
-// Prioritize specific keys, fallback to generic API_KEY
-const textKey = getEnv('TEXT_API_KEY') || getEnv('API_KEY') || '';
-const imageKey = getEnv('IMAGE_API_KEY') || getEnv('API_KEY') || '';
-
-// Allow Model Configuration via Env Vars (with safe defaults)
-const TEXT_MODEL = getEnv('TEXT_MODEL') || 'gemini-2.5-flash';
-const IMAGE_MODEL = getEnv('IMAGE_MODEL') || 'imagen-3.0-generate-001';
+// 2. Get Models
+// @ts-ignore
+const TEXT_MODEL = ENV.VITE_TEXT_MODEL || 'gemini-2.5-flash';
+// @ts-ignore
+const IMAGE_MODEL = ENV.VITE_IMAGE_MODEL || 'imagen-3.0-generate-001';
 
 // Export config for UI Diagnostics
 export const CURRENT_CONFIG = {
@@ -43,7 +27,7 @@ export const CURRENT_CONFIG = {
     hasImageKey: !!imageKey
 };
 
-// Create separate instances for Text and Image operations
+// Create separate instances
 // We only instantiate if keys exist to avoid immediate crashes on load
 const textAI = textKey ? new GoogleGenAI({ apiKey: textKey }) : null;
 const imageAI = imageKey ? new GoogleGenAI({ apiKey: imageKey }) : null;
@@ -51,11 +35,10 @@ const imageAI = imageKey ? new GoogleGenAI({ apiKey: imageKey }) : null;
 // --- Dictionary & Note Taking ---
 export const queryDictionary = async (userInput: string) => {
   if (!textAI) {
-      throw new Error("API Key is missing. Please check Vercel Environment Variables (API_KEY or TEXT_API_KEY).");
+      throw new Error("API Key is missing. Please check Vercel Settings. Key must be named 'VITE_API_KEY'.");
   }
 
   try {
-      // Use textAI for text generation
       const response = await textAI.models.generateContent({
         model: TEXT_MODEL,
         contents: `User query: "${userInput}". 
@@ -82,14 +65,12 @@ export const queryDictionary = async (userInput: string) => {
       return JSON.parse(response.text);
   } catch (e: any) {
       console.error("Dictionary Query Failed:", e);
-      // Re-throw to let UI handle the alert
       throw new Error(e.message || "Failed to fetch definition");
   }
 };
 
 // --- Image Generation for Flashcards ---
 export const generateCardImage = async (word: string, context?: string): Promise<string> => {
-  // Use imageAI for image generation
   if (!imageAI) return `https://picsum.photos/seed/${word}/400/300`; 
 
   try {
@@ -123,13 +104,12 @@ export const generatePetSprite = async (stage: number): Promise<string> => {
     switch(stage) {
         case 0: description = "A mysterious, glowing magical egg, cream and yellow patterns"; break;
         case 1: description = "A tiny, adorable, round baby creature (like a baby Pikachu or slime), very cute, big eyes, yellow and cream colors"; break;
-        case 2: description = "A teenage cute creature, energetic, evolving features, standing up, yellow and cream fur"; break;
+        case 2: description = "A teenage cute creature, energetic, evolving features, standing up, yellow and cream colors"; break;
         case 3: description = "A fully grown, majestic but cute fantasy creature, friendly guardian spirit, yellow, gold and cream colors"; break;
         default: description = "A cute spirit";
     }
 
     try {
-        // Use imageAI
         const response = await imageAI.models.generateImages({
             model: IMAGE_MODEL,
             prompt: `A high-quality 3D render of ${description}. Theme: Warm Yellow, Buttercream, and Gold colors. Pixar style, soft studio lighting, cute, round shapes, matte finish, plain white background, isometric view.`,
@@ -164,7 +144,6 @@ export const generatePetReaction = async (
   `;
 
   try {
-    // Use textAI
     const response = await textAI.models.generateContent({
       model: TEXT_MODEL,
       contents: prompt,
@@ -188,7 +167,6 @@ export const generatePetReaction = async (
 export const generatePostcard = async (petName: string): Promise<string> => {
     if (!imageAI) return `https://picsum.photos/seed/travel/600/400`;
     try {
-        // Use imageAI
         const response = await imageAI.models.generateImages({
             model: IMAGE_MODEL,
             prompt: `A watercolor postcard of a cute yellow/cream mascot named ${petName} in a beautiful travel location.`,
