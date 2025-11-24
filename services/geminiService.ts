@@ -1,43 +1,40 @@
 import { GoogleGenAI, Type } from '@google/genai';
 
-// CRITICAL FIX FOR VERCEL/VITE:
-// We must access import.meta.env.VITE_XXX properties DIRECTLY (verbatim).
-// Do NOT destructure 'env' or use dynamic string access.
-// Vite uses static string replacement at build time.
+// --- Configuration ---
+// CRITICAL: Access import.meta.env.VITE_XXX directly for Vite static replacement.
+// Do not wrap in try-catch blocks that might confuse the bundler.
 
-// 1. Get API Keys (Try specific first, then generic)
 // @ts-ignore
-const textKey = import.meta.env.VITE_TEXT_API_KEY || import.meta.env.VITE_API_KEY || '';
+const VITE_KEY = import.meta.env.VITE_API_KEY ?? '';
 // @ts-ignore
-const imageKey = import.meta.env.VITE_IMAGE_API_KEY || import.meta.env.VITE_API_KEY || '';
+const VITE_TEXT = import.meta.env.VITE_TEXT_MODEL ?? 'gemini-2.5-flash';
+// @ts-ignore
+const VITE_IMAGE = import.meta.env.VITE_IMAGE_MODEL ?? 'gemini-2.5-flash-image';
 
-// 2. Get Models
-// @ts-ignore
-const TEXT_MODEL = import.meta.env.VITE_TEXT_MODEL || 'gemini-2.5-flash';
-// @ts-ignore
-const IMAGE_MODEL = import.meta.env.VITE_IMAGE_MODEL || 'imagen-3.0-generate-001';
+// Fallback for non-Vite environments (if any)
+const PROCESS_KEY = (typeof process !== 'undefined' && process.env) ? (process.env.VITE_API_KEY || process.env.API_KEY) : '';
+
+const API_KEY = VITE_KEY || PROCESS_KEY || '';
+const TEXT_MODEL = VITE_TEXT;
+const IMAGE_MODEL = VITE_IMAGE;
+
+// Initialize Client
+const ai = API_KEY ? new GoogleGenAI({ apiKey: API_KEY }) : null;
 
 // Export config for UI Diagnostics
 export const CURRENT_CONFIG = {
     textModel: TEXT_MODEL,
     imageModel: IMAGE_MODEL,
-    hasTextKey: !!textKey,
-    hasImageKey: !!imageKey
+    hasTextKey: !!API_KEY,
+    hasImageKey: !!API_KEY
 };
-
-// Create separate instances
-// We only instantiate if keys exist to avoid immediate crashes on load
-const textAI = textKey ? new GoogleGenAI({ apiKey: textKey }) : null;
-const imageAI = imageKey ? new GoogleGenAI({ apiKey: imageKey }) : null;
 
 // --- Dictionary & Note Taking ---
 export const queryDictionary = async (userInput: string) => {
-  if (!textAI) {
-      throw new Error("API Key is missing. Please check Vercel Settings > Environment Variables. Key must be named 'VITE_API_KEY'.");
-  }
-
+  if (!ai) throw new Error("Missing API Key. Please configure VITE_API_KEY in Vercel Settings.");
+  
   try {
-      const response = await textAI.models.generateContent({
+      const response = await ai.models.generateContent({
         model: TEXT_MODEL,
         contents: `User query: "${userInput}". 
         Identify the main target English word or phrase the user is asking about. 
@@ -69,35 +66,41 @@ export const queryDictionary = async (userInput: string) => {
 
 // --- Image Generation for Flashcards ---
 export const generateCardImage = async (word: string, context?: string): Promise<string> => {
-  if (!imageAI) return `https://picsum.photos/seed/${word}/400/300`; 
+  if (!ai) return `https://picsum.photos/seed/${word}/400/300`;
 
   try {
-    const response = await imageAI.models.generateImages({
+    const response = await ai.models.generateContent({
         model: IMAGE_MODEL,
-        prompt: `A simple, cute, clear vector-style illustration of the concept "${word}". Context: ${context}. White background, minimalistic, flat design, suitable for language learning cards.`,
+        contents: {
+            parts: [{
+                text: `A simple, cute, clear vector-style illustration of the concept "${word}". Context: ${context}. White background, minimalistic, flat design, suitable for language learning cards.`
+            }]
+        },
         config: {
-            numberOfImages: 1,
-            aspectRatio: '4:3',
-            outputMimeType: 'image/jpeg'
+            imageConfig: {
+                aspectRatio: '4:3'
+            }
         }
     });
 
-    const base64ImageBytes = response.generatedImages?.[0]?.image?.imageBytes;
-    if (base64ImageBytes) {
-        return `data:image/jpeg;base64,${base64ImageBytes}`;
+    for (const part of response.candidates?.[0]?.content?.parts || []) {
+        if (part.inlineData) {
+            return `data:image/jpeg;base64,${part.inlineData.data}`;
+        }
     }
     throw new Error("No image generated");
 
   } catch (e) {
     console.error("Image generation failed", e);
+    // Silent fallback to placeholder
     return `https://picsum.photos/seed/${word}-${new Date().getDate()}/400/300`; 
   }
 };
 
 // --- Pet Visuals ---
 export const generatePetSprite = async (stage: number): Promise<string> => {
-    if (!imageAI) return '';
-    
+    if (!ai) return '';
+
     let description = '';
     switch(stage) {
         case 0: description = "A mysterious, glowing magical egg, cream and yellow patterns"; break;
@@ -108,17 +111,26 @@ export const generatePetSprite = async (stage: number): Promise<string> => {
     }
 
     try {
-        const response = await imageAI.models.generateImages({
+        const response = await ai.models.generateContent({
             model: IMAGE_MODEL,
-            prompt: `A high-quality 3D render of ${description}. Theme: Warm Yellow, Buttercream, and Gold colors. Pixar style, soft studio lighting, cute, round shapes, matte finish, plain white background, isometric view.`,
+            contents: {
+                parts: [{
+                    text: `A high-quality 3D render of ${description}. Theme: Warm Yellow, Buttercream, and Gold colors. Pixar style, soft studio lighting, cute, round shapes, matte finish, plain white background, isometric view.`
+                }]
+            },
             config: {
-                numberOfImages: 1,
-                aspectRatio: '1:1',
-                outputMimeType: 'image/jpeg'
+                imageConfig: {
+                    aspectRatio: '1:1'
+                }
             }
         });
-        const b64 = response.generatedImages?.[0]?.image?.imageBytes;
-        return b64 ? `data:image/jpeg;base64,${b64}` : '';
+        
+        for (const part of response.candidates?.[0]?.content?.parts || []) {
+            if (part.inlineData) {
+                return `data:image/jpeg;base64,${part.inlineData.data}`;
+            }
+        }
+        return '';
     } catch (e) {
         console.error("Pet gen failed", e);
         return '';
@@ -131,7 +143,7 @@ export const generatePetReaction = async (
   stats: any, 
   trigger: 'greeting' | 'completed_task' | 'evolving' | 'traveling'
 ) => {
-  if (!textAI) return { text: "Pika pika!", mood: "happy" };
+  if (!ai) return { text: "Hello! (Configure VITE_API_KEY)", mood: "happy" };
 
   const prompt = `
     You are a virtual pet named ${petState.name}.
@@ -142,7 +154,7 @@ export const generatePetReaction = async (
   `;
 
   try {
-    const response = await textAI.models.generateContent({
+    const response = await ai.models.generateContent({
       model: TEXT_MODEL,
       contents: prompt,
       config: {
@@ -163,15 +175,29 @@ export const generatePetReaction = async (
 };
 
 export const generatePostcard = async (petName: string): Promise<string> => {
-    if (!imageAI) return `https://picsum.photos/seed/travel/600/400`;
+    if (!ai) return `https://picsum.photos/seed/travel-${Date.now()}/600/400`;
+    
     try {
-        const response = await imageAI.models.generateImages({
+        const response = await ai.models.generateContent({
             model: IMAGE_MODEL,
-            prompt: `A watercolor postcard of a cute yellow/cream mascot named ${petName} in a beautiful travel location.`,
-            config: { numberOfImages: 1, aspectRatio: '16:9' }
+            contents: {
+                parts: [{
+                    text: `A watercolor postcard of a cute yellow/cream mascot named ${petName} in a beautiful travel location.`
+                }]
+            },
+            config: {
+                imageConfig: {
+                    aspectRatio: '16:9'
+                }
+            }
         });
-        const b64 = response.generatedImages?.[0]?.image?.imageBytes;
-        return b64 ? `data:image/jpeg;base64,${b64}` : '';
+        
+        for (const part of response.candidates?.[0]?.content?.parts || []) {
+            if (part.inlineData) {
+                return `data:image/jpeg;base64,${part.inlineData.data}`;
+            }
+        }
+        return '';
     } catch {
         return `https://picsum.photos/seed/travel-${Date.now()}/600/400`;
     }
