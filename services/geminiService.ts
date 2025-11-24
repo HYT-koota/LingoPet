@@ -1,22 +1,22 @@
 import { GoogleGenAI, Type } from '@google/genai';
 
 // --- Configuration ---
-// CRITICAL: Access import.meta.env.VITE_XXX directly for Vite static replacement.
-// Do not wrap in try-catch blocks that might confuse the bundler.
+// CRITICAL: We are now enforcing standard models to prevent CORS/Auth errors 
+// caused by invalid custom model names in Vercel.
 
 // @ts-ignore
 const VITE_KEY = import.meta.env.VITE_API_KEY ?? '';
-// @ts-ignore
-const VITE_TEXT = import.meta.env.VITE_TEXT_MODEL ?? 'gemini-2.5-flash';
-// @ts-ignore
-const VITE_IMAGE = import.meta.env.VITE_IMAGE_MODEL ?? 'gemini-2.5-flash-image';
 
-// Fallback for non-Vite environments (if any)
+// Fallback for non-Vite environments
 const PROCESS_KEY = (typeof process !== 'undefined' && process.env) ? (process.env.VITE_API_KEY || process.env.API_KEY) : '';
 
 const API_KEY = VITE_KEY || PROCESS_KEY || '';
-const TEXT_MODEL = VITE_TEXT;
-const IMAGE_MODEL = VITE_IMAGE;
+
+// FORCE STANDARD MODELS
+// The user logs showed "MiniMaxAI" and "seededit" models which are not supported via browser API keys.
+// We hardcode these to ensure stability.
+const TEXT_MODEL = 'gemini-2.5-flash';
+const IMAGE_MODEL = 'gemini-2.5-flash-image';
 
 // Initialize Client
 const ai = API_KEY ? new GoogleGenAI({ apiKey: API_KEY }) : null;
@@ -60,7 +60,12 @@ export const queryDictionary = async (userInput: string) => {
       return JSON.parse(response.text);
   } catch (e: any) {
       console.error("Dictionary Query Failed:", e);
-      throw new Error(e.message || "Failed to fetch definition");
+      // Simplify error message for UI
+      let msg = e.message || "Failed to fetch definition";
+      if (msg.includes("400")) msg = "Invalid Request (400). Check API Key.";
+      if (msg.includes("404")) msg = "Model not found. Google API Issue.";
+      if (msg.includes("Failed to fetch")) msg = "Network Error / CORS Blocked.";
+      throw new Error(msg);
   }
 };
 
@@ -143,7 +148,7 @@ export const generatePetReaction = async (
   stats: any, 
   trigger: 'greeting' | 'completed_task' | 'evolving' | 'traveling'
 ) => {
-  if (!ai) return { text: "Hello! (Configure VITE_API_KEY)", mood: "happy" };
+  if (!ai) return { text: "Hello! (Check VITE_API_KEY)", mood: "happy" };
 
   const prompt = `
     You are a virtual pet named ${petState.name}.
