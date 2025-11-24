@@ -1,9 +1,6 @@
 import { GoogleGenAI, Type } from '@google/genai';
 
 // --- Configuration ---
-// CRITICAL: We are now enforcing standard models to prevent CORS/Auth errors 
-// caused by invalid custom model names in Vercel.
-
 // @ts-ignore
 const VITE_KEY = import.meta.env.VITE_API_KEY ?? '';
 
@@ -12,19 +9,13 @@ const PROCESS_KEY = (typeof process !== 'undefined' && process.env) ? (process.e
 
 const API_KEY = VITE_KEY || PROCESS_KEY || '';
 
-// FORCE STANDARD MODELS
-// The user logs showed "MiniMaxAI" and "seededit" models which are not supported via browser API keys.
-// We hardcode these to ensure stability.
-const TEXT_MODEL = 'gemini-2.5-flash';
-const IMAGE_MODEL = 'gemini-2.5-flash-image';
-
 // Initialize Client
 const ai = API_KEY ? new GoogleGenAI({ apiKey: API_KEY }) : null;
 
 // Export config for UI Diagnostics
 export const CURRENT_CONFIG = {
-    textModel: TEXT_MODEL,
-    imageModel: IMAGE_MODEL,
+    textModel: 'gemini-2.5-flash (Hardcoded)',
+    imageModel: 'gemini-2.5-flash-image (Hardcoded)',
     hasTextKey: !!API_KEY,
     hasImageKey: !!API_KEY
 };
@@ -34,8 +25,9 @@ export const queryDictionary = async (userInput: string) => {
   if (!ai) throw new Error("Missing API Key. Please configure VITE_API_KEY in Vercel Settings.");
   
   try {
+      // FORCE HARDCODED MODEL - IGNORE ENV VARS
       const response = await ai.models.generateContent({
-        model: TEXT_MODEL,
+        model: 'gemini-2.5-flash',
         contents: `User query: "${userInput}". 
         Identify the main target English word or phrase the user is asking about. 
         Provide a simple definition suitable for a learner.
@@ -60,8 +52,8 @@ export const queryDictionary = async (userInput: string) => {
       return JSON.parse(response.text);
   } catch (e: any) {
       console.error("Dictionary Query Failed:", e);
-      // Simplify error message for UI
       let msg = e.message || "Failed to fetch definition";
+      // Provide clearer error messages based on common API failures
       if (msg.includes("400")) msg = "Invalid Request (400). Check API Key.";
       if (msg.includes("404")) msg = "Model not found. Google API Issue.";
       if (msg.includes("Failed to fetch")) msg = "Network Error / CORS Blocked.";
@@ -74,8 +66,9 @@ export const generateCardImage = async (word: string, context?: string): Promise
   if (!ai) return `https://picsum.photos/seed/${word}/400/300`;
 
   try {
+    // FORCE HARDCODED MODEL - IGNORE ENV VARS
     const response = await ai.models.generateContent({
-        model: IMAGE_MODEL,
+        model: 'gemini-2.5-flash-image',
         contents: {
             parts: [{
                 text: `A simple, cute, clear vector-style illustration of the concept "${word}". Context: ${context}. White background, minimalistic, flat design, suitable for language learning cards.`
@@ -97,7 +90,6 @@ export const generateCardImage = async (word: string, context?: string): Promise
 
   } catch (e) {
     console.error("Image generation failed", e);
-    // Silent fallback to placeholder
     return `https://picsum.photos/seed/${word}-${new Date().getDate()}/400/300`; 
   }
 };
@@ -116,8 +108,9 @@ export const generatePetSprite = async (stage: number): Promise<string> => {
     }
 
     try {
+        // FORCE HARDCODED MODEL - IGNORE ENV VARS
         const response = await ai.models.generateContent({
-            model: IMAGE_MODEL,
+            model: 'gemini-2.5-flash-image',
             contents: {
                 parts: [{
                     text: `A high-quality 3D render of ${description}. Theme: Warm Yellow, Buttercream, and Gold colors. Pixar style, soft studio lighting, cute, round shapes, matte finish, plain white background, isometric view.`
@@ -159,8 +152,9 @@ export const generatePetReaction = async (
   `;
 
   try {
+    // FORCE HARDCODED MODEL - IGNORE ENV VARS
     const response = await ai.models.generateContent({
-      model: TEXT_MODEL,
+      model: 'gemini-2.5-flash',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -183,8 +177,9 @@ export const generatePostcard = async (petName: string): Promise<string> => {
     if (!ai) return `https://picsum.photos/seed/travel-${Date.now()}/600/400`;
     
     try {
+        // FORCE HARDCODED MODEL - IGNORE ENV VARS
         const response = await ai.models.generateContent({
-            model: IMAGE_MODEL,
+            model: 'gemini-2.5-flash-image',
             contents: {
                 parts: [{
                     text: `A watercolor postcard of a cute yellow/cream mascot named ${petName} in a beautiful travel location.`
