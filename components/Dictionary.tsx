@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Mic, Search, Loader2, CheckCircle, Sparkles } from 'lucide-react';
 import { queryDictionary, generateCardImage } from '../services/geminiService';
-import { saveWord, updateWord, updateDailyStats } from '../services/storageService';
+import { saveWord, updateWord, updateDailyStats, getDailyStats } from '../services/storageService';
 import { WordEntry } from '../types';
 
 interface DictionaryProps {
@@ -67,7 +67,10 @@ const Dictionary: React.FC<DictionaryProps> = ({ onWordAdded }) => {
             });
         });
 
-        updateDailyStats({ wordsAdded: (curr) => (curr || 0) + 1 } as any);
+        // Fixed: Get current stats first, then increment
+        const currentStats = getDailyStats();
+        updateDailyStats({ wordsAdded: (currentStats.wordsAdded || 0) + 1 });
+        
         setAdded(true);
         onWordAdded();
       }

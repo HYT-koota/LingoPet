@@ -1,31 +1,23 @@
 import { GoogleGenAI, Type } from '@google/genai';
 
-// --- Configuration ---
-// @ts-ignore
-const VITE_KEY = import.meta.env.VITE_API_KEY ?? '';
-
-// Fallback for non-Vite environments
-const PROCESS_KEY = (typeof process !== 'undefined' && process.env) ? (process.env.VITE_API_KEY || process.env.API_KEY) : '';
-
-const API_KEY = VITE_KEY || PROCESS_KEY || '';
-
 // Initialize Client
-const ai = API_KEY ? new GoogleGenAI({ apiKey: API_KEY }) : null;
+// The API key must be obtained exclusively from the environment variable process.env.API_KEY
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+// Check if API Key exists safely
+const hasKey = !!(process.env.API_KEY && process.env.API_KEY.length > 0);
 
 // Export config for UI Diagnostics
 export const CURRENT_CONFIG = {
-    textModel: 'gemini-2.5-flash (Hardcoded)',
-    imageModel: 'gemini-2.5-flash-image (Hardcoded)',
-    hasTextKey: !!API_KEY,
-    hasImageKey: !!API_KEY
+    textModel: 'gemini-2.5-flash',
+    imageModel: 'gemini-2.5-flash-image',
+    hasTextKey: hasKey, 
+    hasImageKey: hasKey
 };
 
 // --- Dictionary & Note Taking ---
 export const queryDictionary = async (userInput: string) => {
-  if (!ai) throw new Error("Missing API Key. Please configure VITE_API_KEY in Vercel Settings.");
-  
   try {
-      // FORCE HARDCODED MODEL - IGNORE ENV VARS
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: `User query: "${userInput}". 
@@ -53,7 +45,6 @@ export const queryDictionary = async (userInput: string) => {
   } catch (e: any) {
       console.error("Dictionary Query Failed:", e);
       let msg = e.message || "Failed to fetch definition";
-      // Provide clearer error messages based on common API failures
       if (msg.includes("400")) msg = "Invalid Request (400). Check API Key.";
       if (msg.includes("404")) msg = "Model not found. Google API Issue.";
       if (msg.includes("Failed to fetch")) msg = "Network Error / CORS Blocked.";
@@ -63,10 +54,7 @@ export const queryDictionary = async (userInput: string) => {
 
 // --- Image Generation for Flashcards ---
 export const generateCardImage = async (word: string, context?: string): Promise<string> => {
-  if (!ai) return `https://picsum.photos/seed/${word}/400/300`;
-
   try {
-    // FORCE HARDCODED MODEL - IGNORE ENV VARS
     const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash-image',
         contents: {
@@ -96,8 +84,6 @@ export const generateCardImage = async (word: string, context?: string): Promise
 
 // --- Pet Visuals ---
 export const generatePetSprite = async (stage: number): Promise<string> => {
-    if (!ai) return '';
-
     let description = '';
     switch(stage) {
         case 0: description = "A mysterious, glowing magical egg, cream and yellow patterns"; break;
@@ -108,7 +94,6 @@ export const generatePetSprite = async (stage: number): Promise<string> => {
     }
 
     try {
-        // FORCE HARDCODED MODEL - IGNORE ENV VARS
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash-image',
             contents: {
@@ -141,8 +126,6 @@ export const generatePetReaction = async (
   stats: any, 
   trigger: 'greeting' | 'completed_task' | 'evolving' | 'traveling'
 ) => {
-  if (!ai) return { text: "Hello! (Check VITE_API_KEY)", mood: "happy" };
-
   const prompt = `
     You are a virtual pet named ${petState.name}.
     Current Stage: ${petState.stage}.
@@ -152,7 +135,6 @@ export const generatePetReaction = async (
   `;
 
   try {
-    // FORCE HARDCODED MODEL - IGNORE ENV VARS
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
@@ -163,7 +145,8 @@ export const generatePetReaction = async (
             properties: {
                 text: { type: Type.STRING },
                 mood: { type: Type.STRING, enum: ['happy', 'excited', 'sleepy', 'proud'] }
-            }
+            },
+            required: ['text', 'mood']
         }
       }
     });
@@ -174,10 +157,7 @@ export const generatePetReaction = async (
 };
 
 export const generatePostcard = async (petName: string): Promise<string> => {
-    if (!ai) return `https://picsum.photos/seed/travel-${Date.now()}/600/400`;
-    
     try {
-        // FORCE HARDCODED MODEL - IGNORE ENV VARS
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash-image',
             contents: {

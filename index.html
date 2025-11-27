@@ -6,7 +6,8 @@
     <title>LingoPet Companion</title>
     <script>
       // CRITICAL FIX: Polyfill 'process' to prevent crash in browser environments
-      window.process = { env: {} };
+      // Use logical OR to preserve existing process if injected by build tools
+      window.process = window.process || { env: {} };
     </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
