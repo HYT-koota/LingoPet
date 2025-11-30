@@ -123,10 +123,11 @@ async function fetchImageGeneration(prompt: string): Promise<string> {
     if (!IMAGE_KEY) throw new Error("Image API Key is missing");
 
     // Smart Endpoint Construction
-    // If the user provided a full path in Env Var (e.g. ending in 'generations'), use it directly.
-    // Otherwise, append the standard OpenAI path.
+    // If user provided a full path (e.g. gmi-serving/v1/images/generations), use it.
+    // If they provided a base (e.g. gmi-serving/v1), append /images/generations
     let endpoint = IMAGE_BASE_URL;
-    if (!endpoint.endsWith('generations') && !endpoint.endsWith('text_to_image')) {
+    if (!endpoint.endsWith('generations')) {
+        // Check if it already has /v1
         const base = endpoint.endsWith('/v1') ? endpoint : `${endpoint}/v1`;
         endpoint = `${base}/images/generations`;
     }
@@ -136,16 +137,16 @@ async function fetchImageGeneration(prompt: string): Promise<string> {
     // Safe 32-bit Integer for Seed
     const randomSeed = Math.floor(Math.random() * 2147483647);
 
-    // OpenAI Compatible Payload with Flattened Extensions
+    // Payload - Flattened for OpenAI-compatible gateways
+    // We increased guidance_scale to 7.5 to strict adherence (Fixing the "face on egg" issue)
     const requestBody = {
         model: IMAGE_MODEL,
         prompt: prompt,
         n: 1,
         size: "1024x1024",
         response_format: "url",
-        // Flattened params for GMI/SeaDream/MiniMax
         seed: randomSeed,
-        guidance_scale: 2.5, // Official recommended value
+        guidance_scale: 7.5, // INCREASED from 2.5 to 7.5 to force model to listen to "NO FACE"
     };
 
     console.log(`[Image API] Endpoint: ${endpoint}`);
@@ -220,18 +221,18 @@ export const generatePetSprite = async (stage: number): Promise<string> => {
     let prompt = '';
 
     if (stage === 0) {
-        // Stage 0: EGG -> GEMSTONE FIX
-        // 使用“圆形宝石”、“水晶球”来替代“蛋”，因为模型对“蛋”有严重的人脸幻觉。
-        prompt = `一个漂浮的圆形魔法水晶球，发光的金色纹理，3D渲染，C4D风格，OC渲染，光滑的玻璃材质，静物摄影，极简背景，无生命，没有脸，没有五官。`;
+        // Stage 0: EGG -> PURE GEOMETRIC FIX
+        // "魔法" "水晶" might trigger fantasy characters. 
+        // We use "Yellow Ball" and "Product Photo" to enforce object nature.
+        prompt = `一个黄色的圆形宝石球，光滑表面，放置在白色背景上。产品摄影，特写镜头，高分辨率，极简主义。绝对不是人，没有脸，没有五官，没有四肢，仅仅是一个球体。`;
     } else {
         // Stage 1+: PLUSHIE FIX
-        // 使用“毛绒公仔”来替代“角色”，确保画风可爱且不像人。
         let description = "";
-        if (stage === 1) description = "黄色圆形毛绒公仔，像小鸡";
-        if (stage === 2) description = "橙色小狐狸毛绒玩具";
-        if (stage === 3) description = "神秘的魔法生物手办";
+        if (stage === 1) description = "黄色小鸡形状的毛绒公仔";
+        if (stage === 2) description = "橙色小狐狸形状的软胶玩具";
+        if (stage === 3) description = "神秘生物造型的精美手办";
 
-        prompt = `盲盒风格，${description}，柔软的毛绒材质，工作室灯光，3D渲染，可爱，Q版，无文字，无水印。`;
+        prompt = `3D渲染图标，${description}，纯色背景，工作室灯光，C4D，Octane渲染，超高清，可爱，Q版。无水印。`;
     }
 
     try {

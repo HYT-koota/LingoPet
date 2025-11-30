@@ -1,3 +1,4 @@
+
 import { DailyStats, PetState, PetStage, WordEntry } from '../types';
 
 const KEYS = {
@@ -56,6 +57,14 @@ export const getPetState = (): PetState => {
       const parsed = JSON.parse(data);
       // Migration for existing users
       if (!parsed.imageUrls) parsed.imageUrls = {};
+      
+      // --- CACHE BUSTING FIX ---
+      // If we are at stage 0 (Egg) and have an image, clear it to force regeneration
+      // This solves the issue where the user is stuck seeing the "Ugly/Humanoid" egg from previous failed attempts.
+      if (parsed.stage === PetStage.EGG && parsed.imageUrls[0]) {
+         delete parsed.imageUrls[0];
+      }
+      
       return parsed;
   }
   return INITIAL_PET;
