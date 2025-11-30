@@ -1,14 +1,19 @@
+
 // --- Generic API Service (Split Text & Image) ---
 
+// Helper to clean config values (remove spaces, trailing slashes)
+const cleanUrl = (url?: string) => url ? url.trim().replace(/\/+$/, '') : '';
+const cleanVal = (val?: string) => val ? val.trim() : '';
+
 // 1. Text Configuration (Chat / Definitions)
-const TEXT_KEY = process.env.TEXT_API_KEY || '';
-const TEXT_BASE_URL = process.env.TEXT_API_BASE_URL || 'https://api.openai.com/v1';
-const TEXT_MODEL = process.env.TEXT_API_MODEL || 'gpt-3.5-turbo';
+const TEXT_KEY = cleanVal(process.env.TEXT_API_KEY);
+const TEXT_BASE_URL = cleanUrl(process.env.TEXT_API_BASE_URL) || 'https://api.openai.com/v1';
+const TEXT_MODEL = cleanVal(process.env.TEXT_API_MODEL) || 'gpt-3.5-turbo';
 
 // 2. Image Configuration (Visuals / Pet Sprites)
-const IMAGE_KEY = process.env.IMAGE_API_KEY || '';
-const IMAGE_BASE_URL = process.env.IMAGE_API_BASE_URL || 'https://api.openai.com/v1';
-const IMAGE_MODEL = process.env.IMAGE_API_MODEL || 'dall-e-3';
+const IMAGE_KEY = cleanVal(process.env.IMAGE_API_KEY);
+const IMAGE_BASE_URL = cleanUrl(process.env.IMAGE_API_BASE_URL) || 'https://api.openai.com/v1';
+const IMAGE_MODEL = cleanVal(process.env.IMAGE_API_MODEL) || 'dall-e-3';
 
 // Diagnostics for UI
 export const CURRENT_CONFIG = {
@@ -61,20 +66,31 @@ async function fetchTextCompletion(
         temperature: 0.7,
     };
 
-    if (jsonMode && (TEXT_MODEL.includes('gpt') || TEXT_MODEL.includes('deepseek'))) {
+    // Only add response_format for models known to support it to avoid 400 errors on custom models
+    if (jsonMode && (TEXT_MODEL.toLowerCase().includes('gpt') || TEXT_MODEL.toLowerCase().includes('deepseek'))) {
         body.response_format = { type: "json_object" };
     }
 
+    const endpoint = `${TEXT_BASE_URL}/chat/completions`;
+
     try {
-        const response = await fetch(`${TEXT_BASE_URL}/chat/completions`, {
+        console.log(`[Text API] Sending request to: ${endpoint} | Model: ${TEXT_MODEL}`);
+        
+        const response = await fetch(endpoint, {
             method: 'POST',
             headers,
             body: JSON.stringify(body)
         });
 
         if (!response.ok) {
-            const err = await response.text();
-            throw new Error(`Text API Error ${response.status}: ${err}`);
+            const errText = await response.text();
+            console.error(`[Text API Error] Status: ${response.status}`, errText);
+            
+            // Check for common 404 issues
+            if (response.status === 404) {
+                throw new Error(`API 404 Not Found. Check BASE_URL (${TEXT_BASE_URL}) and MODEL (${TEXT_MODEL}). Provider message: ${errText}`);
+            }
+            throw new Error(`Text API Error ${response.status}: ${errText}`);
         }
 
         const data = await response.json();
@@ -89,9 +105,13 @@ async function fetchTextCompletion(
 async function fetchImageGeneration(prompt: string): Promise<string> {
     if (!IMAGE_KEY) throw new Error("Image API Key is missing");
 
+    const endpoint = `${IMAGE_BASE_URL}/images/generations`;
+
     try {
+        console.log(`[Image API] Sending request to: ${endpoint} | Model: ${IMAGE_MODEL}`);
+
         // Standard OpenAI Image Endpoint format
-        const response = await fetch(`${IMAGE_BASE_URL}/images/generations`, {
+        const response = await fetch(endpoint, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -108,7 +128,7 @@ async function fetchImageGeneration(prompt: string): Promise<string> {
 
         if (!response.ok) {
              const errText = await response.text();
-             console.error("Image Gen Error Details:", errText);
+             console.error(`[Image API Error] Status: ${response.status}`, errText);
              throw new Error("Image API Failed");
         }
         
@@ -147,7 +167,12 @@ export const queryDictionary = async (userInput: string) => {
 // --- Image Generation Public Methods ---
 export const generateCardImage = async (word: string, context?: string): Promise<string> => {
   try {
-    const prompt = `A cute, minimalistic, flat vector illustration of "${word}". Context: ${context}. White background.`;
+    // UPDATED PROMPT (Chinese): 吉卜力/治愈系插画风格
+    const prompt = `一张高质量、柔和的数字插画，描绘内容：“${word}”。
+    语境：${context}。
+    风格：宫崎骏吉卜力风格，治愈系，粉彩配色，柔和光照，杰作，4k分辨率，高细节。
+    构图：居中，干净的米白色背景。无文字。`;
+    
     return await fetchImageGeneration(prompt);
   } catch (e) {
     console.warn("Using fallback image due to API error");
@@ -158,15 +183,20 @@ export const generateCardImage = async (word: string, context?: string): Promise
 export const generatePetSprite = async (stage: number): Promise<string> => {
     let description = '';
     switch(stage) {
-        case 0: description = "A mysterious, glowing magical egg, yellow patterns"; break;
-        case 1: description = "A tiny, round baby creature, yellow and cream colors"; break;
-        case 2: description = "A teenage cute creature, evolving features, yellow colors"; break;
-        case 3: description = "A majestic fantasy creature, guardian spirit, gold colors"; break;
-        default: description = "A cute spirit";
+        case 0: description = "神秘的发光魔法蛋，带有金色符文图案，散发着神秘光环"; break;
+        case 1: description = "可爱的圆形幼年生物（类似宝可梦风格），小巧嘟嘟，黄色和奶油色的皮毛，大眼睛"; break;
+        case 2: description = "少年期的奇幻生物，正在进化的特征，充满活力的姿势，黄色和橙色的发光点缀"; break;
+        case 3: description = "威严的守护神兽，带有金色盔甲元素，飘逸的尾巴，既强大又可爱"; break;
+        default: description = "可爱的精灵生物";
     }
 
     try {
-        const prompt = `3D render of ${description}. Pixar style, cute, matte finish, white background, isometric view.`;
+        // UPDATED PROMPT (Chinese): 盲盒/泡泡玛特 3D 风格
+        const prompt = `一张高质量的3D渲染图，内容是：${description}。
+        风格：盲盒玩具设计，泡泡玛特(Pop Mart)风格，C4D渲染，OC渲染，粘土材质，柔和摄影棚光效，可爱，Q版比例。
+        视角：等轴正视图。
+        背景：纯白背景，干净无杂物。`;
+        
         return await fetchImageGeneration(prompt);
     } catch (e) {
         console.warn("Using fallback pet sprite");
@@ -197,7 +227,10 @@ export const generatePetReaction = async (
 export const generatePostcard = async (petName: string): Promise<string> => {
     // Postcards are images
     try {
-        const prompt = `A beautiful travel postcard landscape, artistic style, featuring a hidden small cute yellow creature.`;
+        // UPDATED PROMPT (Chinese): 新海诚/二次元风景风格
+        const prompt = `一张令人惊叹的著名世界地标风景数字绘画。
+        风格：新海诚动漫背景风格，充满活力的蓝天，电影级光效，高度细节，杰作。
+        前景：一只黄色的小型奇幻萌物（宠物）正在自拍或躲在场景中。`;
         return await fetchImageGeneration(prompt);
     } catch(e) {
         return `https://picsum.photos/seed/travel-${Date.now()}/600/400`;
