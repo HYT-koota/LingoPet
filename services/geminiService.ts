@@ -57,12 +57,12 @@ function generateUUID() {
 }
 
 // --- Helper: Create Clean SVG Placeholder ---
-function getPlaceholder(text: string, color: string = "#FFD700") {
+function getPlaceholder(text: string, color: string = "#E5E7EB") {
     const svg = `
     <svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
-        <rect width="512" height="512" fill="#F3F4F6"/>
-        <circle cx="256" cy="256" r="100" fill="${color}" opacity="0.5"/>
-        <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="24" fill="#6B7280" font-weight="bold">${text}</text>
+        <rect width="512" height="512" fill="#F9FAFB"/>
+        <rect x="156" y="156" width="200" height="200" rx="40" fill="${color}" opacity="0.2"/>
+        <path d="M256 200 L256 312 M200 256 L312 256" stroke="${color}" stroke-width="20" stroke-linecap="round" opacity="0.4"/>
     </svg>`;
     return `data:image/svg+xml;base64,${btoa(svg)}`;
 }
@@ -94,10 +94,8 @@ async function fetchTextCompletion(
     }
 
     // Ensure we handle /v1 correctly for Chat
-    // If base url ends in /v1, don't append it again. If not, append it.
-    // Standard OpenAI chat endpoint is /v1/chat/completions
     const baseUrl = TEXT_BASE_URL.endsWith('/v1') ? TEXT_BASE_URL : `${TEXT_BASE_URL}/v1`;
-    const endpoint = `${baseUrl}/chat/completions`;
+    const endpoint = `${baseUrl}/chat/completions`.replace(/([^:]\/)\/+/g, "$1");
 
     try {
         const response = await fetch(endpoint, {
@@ -124,57 +122,33 @@ async function fetchTextCompletion(
 async function fetchImageGeneration(prompt: string): Promise<string> {
     if (!IMAGE_KEY) throw new Error("Image API Key is missing");
 
-    // Seed Limit: Signed 32-bit Integer Max
+    // Smart Endpoint Construction
+    // If the user provided a full path in Env Var (e.g. ending in 'generations'), use it directly.
+    // Otherwise, append the standard OpenAI path.
+    let endpoint = IMAGE_BASE_URL;
+    if (!endpoint.endsWith('generations') && !endpoint.endsWith('text_to_image')) {
+        const base = endpoint.endsWith('/v1') ? endpoint : `${endpoint}/v1`;
+        endpoint = `${base}/images/generations`;
+    }
+    // Clean double slashes
+    endpoint = endpoint.replace(/([^:]\/)\/+/g, "$1");
+
+    // Safe 32-bit Integer for Seed
     const randomSeed = Math.floor(Math.random() * 2147483647);
 
-    // Prompt Cleanup
-    const fullPrompt = `${prompt}, (masterpiece), (best quality), highres, 8k, simple background`;
-    const negativePrompt = "nsfw, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry, humanoid, human face, girl, boy, man, woman";
+    // OpenAI Compatible Payload with Flattened Extensions
+    const requestBody = {
+        model: IMAGE_MODEL,
+        prompt: prompt,
+        n: 1,
+        size: "1024x1024",
+        response_format: "url",
+        // Flattened params for GMI/SeaDream/MiniMax
+        seed: randomSeed,
+        guidance_scale: 2.5, // Official recommended value
+    };
 
-    // Detect if we are likely using a Native MiniMax/SeaDream model
-    const isNativePayload = IMAGE_MODEL.toLowerCase().includes('seedream') || IMAGE_MODEL.toLowerCase().includes('minimax');
-
-    // 构造请求体
-    let requestBody: any;
-    let endpoint = "";
-
-    if (isNativePayload) {
-        // --- SeaDream / MiniMax Native Structure ---
-        requestBody = {
-            model: IMAGE_MODEL,
-            request_id: generateUUID(),
-            payload: {
-                prompt: fullPrompt + " --no " + negativePrompt, // In-prompt negative since API doesn't support param
-                size: "1024x1024", 
-                seed: randomSeed,
-                guidance_scale: 2.5,
-                add_watermark: false,
-                response_format: "url"
-            }
-        };
-
-        // --- Endpoint Strategy for Native ---
-        // Native MiniMax usually expects: host/v1/text_to_image
-        // We strip /v1 from the base URL if it exists, then append /v1/text_to_image manually
-        // to ensure we get the structure right regardless of user input.
-        const rootUrl = IMAGE_BASE_URL.replace(/\/v1\/?$/, '').replace(/\/+$/, '');
-        endpoint = `${rootUrl}/v1/text_to_image`;
-
-    } else {
-        // --- Standard OpenAI Structure ---
-        requestBody = {
-            model: IMAGE_MODEL,
-            prompt: fullPrompt,
-            n: 1,
-            size: "1024x1024"
-        };
-
-        // Standard OpenAI endpoint logic
-        const baseUrl = IMAGE_BASE_URL.endsWith('/v1') ? IMAGE_BASE_URL : `${IMAGE_BASE_URL}/v1`;
-        endpoint = `${baseUrl}/images/generations`;
-    }
-
-    console.log(`[Image API] Sending Request to: ${endpoint}`);
+    console.log(`[Image API] Endpoint: ${endpoint}`);
     console.log(`[Image API] Payload:`, JSON.stringify(requestBody, null, 2));
 
     try {
@@ -191,34 +165,25 @@ async function fetchImageGeneration(prompt: string): Promise<string> {
              const errText = await response.text();
              console.error(`[Image API CRITICAL ERROR] Status: ${response.status}`);
              console.error(`[Image API CRITICAL ERROR] Body: ${errText}`);
-             throw new Error(`Image API Failed (${response.status}): ${errText}`);
+             throw new Error(`Image API Failed (${response.status})`);
         }
         
         const data = await response.json();
-        console.log("[Image API] Success Data:", data); 
         
-        // 1. SeaDream/MiniMax specific: outcome.media_urls
-        if (data.outcome && data.outcome.media_urls && data.outcome.media_urls.length > 0) {
-            return data.outcome.media_urls[0].url;
-        }
-        
-        // 2. Some providers wrap it in 'base_resp'
-        if (data.base_resp && data.base_resp.status_msg === 'success' && data.reply) {
-             // Try to parse reply if it looks like standard format, otherwise check custom fields
-             // (This is rare but some gateways do it)
-        }
-
-        // 3. Standard OpenAI: data[0].url
+        // 1. Standard OpenAI
         if (data.data && data.data[0]) {
             if (data.data[0].url) return data.data[0].url;
-            if (data.data[0].b64_json) return `data:image/jpeg;base64,${data.data[0].b64_json}`;
             if (data.data[0].image_url) return data.data[0].image_url;
         }
         
-        if (data.url) return data.url;
-        
-        console.error("[Image API Parsing Error] Could not find URL in response keys. Available keys:", Object.keys(data));
-        throw new Error("No image data received in response");
+        // 2. GMI Native / Custom Formats
+        if (data.outcome && data.outcome.media_urls && data.outcome.media_urls.length > 0) {
+            return data.outcome.media_urls[0].url;
+        }
+
+        console.error("[Image API] Response format unrecognized:", data);
+        throw new Error("No image URL found in response");
+
     } catch (e) {
         console.error("fetchImageGeneration Exception:", e);
         throw e; 
@@ -240,43 +205,40 @@ export const queryDictionary = async (userInput: string) => {
 
 // --- Image Generation Public Methods ---
 
-/**
- * 单词卡片生成
- */
 export const generateCardImage = async (word: string, context?: string): Promise<string> => {
   try {
-    const prompt = `vector icon of ${word}, ${context}, flat design, minimalist, white background, app icon style, high quality, no text`;
+    // 强制“吉卜力插画” + “中文语义”，确保 SeaDream 能听懂且不画糊
+    const prompt = `吉卜力动画风格插画，极简主义，手绘，清晰的线条，高分辨率，生动。画面内容：${word} (${context})。纯色背景，不要文字，不要水印。`;
     return await fetchImageGeneration(prompt);
   } catch (e) {
-    console.error("Card Image Error - Using Fallback:", e);
-    return getPlaceholder(word, "#FFA500");
+    console.error("Card Image Error:", e);
+    return getPlaceholder(word, "#FBBF24");
   }
 };
 
-/**
- * 宠物生成
- */
 export const generatePetSprite = async (stage: number): Promise<string> => {
     let prompt = '';
 
     if (stage === 0) {
-        // Stage 0: 强制静物 - 3D Icon
-        prompt = `3D render icon of a mysterious round golden egg, smooth texture, shiny, isometric view, on white background, 3d game asset, no face, no eyes, no limbs, inanimate object`;
+        // Stage 0: EGG -> GEMSTONE FIX
+        // 使用“圆形宝石”、“水晶球”来替代“蛋”，因为模型对“蛋”有严重的人脸幻觉。
+        prompt = `一个漂浮的圆形魔法水晶球，发光的金色纹理，3D渲染，C4D风格，OC渲染，光滑的玻璃材质，静物摄影，极简背景，无生命，没有脸，没有五官。`;
     } else {
-        // Stage 1+: 毛绒玩具
+        // Stage 1+: PLUSHIE FIX
+        // 使用“毛绒公仔”来替代“角色”，确保画风可爱且不像人。
         let description = "";
-        if (stage === 1) description = "cute yellow round monster plushie";
-        if (stage === 2) description = "fox plushie toy";
-        if (stage === 3) description = "mythical beast figurine";
+        if (stage === 1) description = "黄色圆形毛绒公仔，像小鸡";
+        if (stage === 2) description = "橙色小狐狸毛绒玩具";
+        if (stage === 3) description = "神秘的魔法生物手办";
 
-        prompt = `3D render of ${description}, cute, soft lighting, isometric view, white background, blind box style, no human, animal shape`;
+        prompt = `盲盒风格，${description}，柔软的毛绒材质，工作室灯光，3D渲染，可爱，Q版，无文字，无水印。`;
     }
 
     try {
         return await fetchImageGeneration(prompt);
     } catch (e) {
-        console.error("Pet Sprite Error - Using Fallback:", e);
-        return getPlaceholder(stage === 0 ? "Egg" : `Pet Lv.${stage}`, "#FFD700");
+        console.error("Pet Sprite Error:", e);
+        return getPlaceholder("Pet", "#FCD34D");
     }
 }
 
@@ -297,15 +259,11 @@ export const generatePetReaction = async (
   }
 };
 
-/**
- * 旅行明信片生成
- */
 export const generatePostcard = async (petName: string): Promise<string> => {
     try {
-        const prompt = `beautiful landscape painting, ghibli style, blue sky, green grass, peaceful, anime style scenery, high quality`;
+        const prompt = `新海诚风格风景画，旅行明信片，蓝天白云，治愈系，高画质，细腻的光影，无文字。`;
         return await fetchImageGeneration(prompt);
     } catch(e) {
-        console.error("Postcard Error - Using Fallback:", e);
-        return getPlaceholder("Travel", "#87CEEB");
+        return getPlaceholder("Travel", "#60A5FA");
     }
 }
