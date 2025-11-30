@@ -92,26 +92,35 @@ const PetProfile: React.FC<PetProfileProps> = ({ pet }) => {
                 <h3 className="font-bold flex items-center gap-1"><Activity size={12}/> SYSTEM DIAGNOSTICS</h3>
             </div>
             
-            <div className="grid grid-cols-2 gap-2">
-                <div>
-                    <span className="block opacity-50">API Key Status:</span>
-                    <span className={CURRENT_CONFIG.hasTextKey ? "text-green-600 font-bold" : "text-red-500 font-bold"}>
-                        {CURRENT_CONFIG.hasTextKey ? "✅ Configured" : "❌ Missing"}
-                    </span>
+            <div className="grid grid-cols-2 gap-2 gap-y-4">
+                {/* Text Config */}
+                <div className="col-span-2 border-b border-gray-200 pb-2">
+                    <span className="block font-bold text-gray-600 mb-1">Text API (Chat)</span>
+                    <div className="flex justify-between">
+                         <span className="opacity-70">Status:</span>
+                         <span className={CURRENT_CONFIG.hasTextKey ? "text-green-600 font-bold" : "text-red-500 font-bold"}>
+                            {CURRENT_CONFIG.hasTextKey ? "✅ Ready" : "❌ Missing"}
+                        </span>
+                    </div>
+                    <div className="flex justify-between mt-1">
+                         <span className="opacity-70">Model:</span>
+                         <span className="text-gray-700">{CURRENT_CONFIG.textModel}</span>
+                    </div>
                 </div>
-                 <div>
-                    <span className="block opacity-50">Text Model:</span>
-                    <span className="text-gray-700">{CURRENT_CONFIG.textModel}</span>
-                </div>
-                <div>
-                    <span className="block opacity-50">Image Key Status:</span>
-                     <span className={CURRENT_CONFIG.hasImageKey ? "text-green-600 font-bold" : "text-red-500 font-bold"}>
-                        {CURRENT_CONFIG.hasImageKey ? "✅ Configured" : "❌ Missing"}
-                    </span>
-                </div>
-                 <div>
-                    <span className="block opacity-50">Image Model:</span>
-                    <span className="text-gray-700">{CURRENT_CONFIG.imageModel}</span>
+
+                {/* Image Config */}
+                <div className="col-span-2">
+                    <span className="block font-bold text-gray-600 mb-1">Image API (DALL-E)</span>
+                    <div className="flex justify-between">
+                         <span className="opacity-70">Status:</span>
+                         <span className={CURRENT_CONFIG.hasImageKey ? "text-green-600 font-bold" : "text-red-500 font-bold"}>
+                            {CURRENT_CONFIG.hasImageKey ? "✅ Ready" : "❌ Missing"}
+                        </span>
+                    </div>
+                    <div className="flex justify-between mt-1">
+                         <span className="opacity-70">Model:</span>
+                         <span className="text-gray-700">{CURRENT_CONFIG.imageModel}</span>
+                    </div>
                 </div>
             </div>
        </div>

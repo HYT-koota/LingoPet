@@ -2,16 +2,21 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
-  // Load env file based on `mode` in the current working directory.
-  // Set the third parameter to '' to load all env regardless of the `VITE_` prefix.
   const env = loadEnv(mode, (process as any).cwd(), '');
 
   return {
     plugins: [react()],
     define: {
-      // Injects the API_KEY from Vercel environment variables into the client-side code
-      // Note: This exposes the key in the bundle, which is expected for this client-side demo structure.
-      'process.env.API_KEY': JSON.stringify(env.API_KEY)
+      // Inject Environment Variables safely into the client bundle
+      // Text Configuration
+      'process.env.TEXT_API_KEY': JSON.stringify(env.TEXT_API_KEY || env.API_KEY || ''),
+      'process.env.TEXT_API_BASE_URL': JSON.stringify(env.TEXT_API_BASE_URL || env.API_BASE_URL || 'https://api.openai.com/v1'),
+      'process.env.TEXT_API_MODEL': JSON.stringify(env.TEXT_API_MODEL || env.API_MODEL || 'gpt-3.5-turbo'),
+      
+      // Image Configuration
+      'process.env.IMAGE_API_KEY': JSON.stringify(env.IMAGE_API_KEY || env.API_KEY || ''),
+      'process.env.IMAGE_API_BASE_URL': JSON.stringify(env.IMAGE_API_BASE_URL || env.API_BASE_URL || 'https://api.openai.com/v1'),
+      'process.env.IMAGE_API_MODEL': JSON.stringify(env.IMAGE_API_MODEL || 'dall-e-3')
     }
   };
 });
