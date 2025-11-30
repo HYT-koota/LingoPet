@@ -56,6 +56,17 @@ function generateUUID() {
     });
 }
 
+// --- Helper: Create Clean SVG Placeholder ---
+function getPlaceholder(text: string, color: string = "#FFD700") {
+    const svg = `
+    <svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+        <rect width="512" height="512" fill="#F3F4F6"/>
+        <circle cx="256" cy="256" r="100" fill="${color}" opacity="0.5"/>
+        <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="24" fill="#6B7280" font-weight="bold">${text}</text>
+    </svg>`;
+    return `data:image/svg+xml;base64,${btoa(svg)}`;
+}
+
 // --- TEXT API CALLS ---
 async function fetchTextCompletion(
     systemPrompt: string, 
@@ -82,7 +93,11 @@ async function fetchTextCompletion(
         body.response_format = { type: "json_object" };
     }
 
-    const endpoint = `${TEXT_BASE_URL}/chat/completions`;
+    // Ensure we handle /v1 correctly for Chat
+    // If base url ends in /v1, don't append it again. If not, append it.
+    // Standard OpenAI chat endpoint is /v1/chat/completions
+    const baseUrl = TEXT_BASE_URL.endsWith('/v1') ? TEXT_BASE_URL : `${TEXT_BASE_URL}/v1`;
+    const endpoint = `${baseUrl}/chat/completions`;
 
     try {
         const response = await fetch(endpoint, {
@@ -113,28 +128,38 @@ async function fetchImageGeneration(prompt: string): Promise<string> {
     const randomSeed = Math.floor(Math.random() * 2147483647);
 
     // Prompt Cleanup
-    const fullPrompt = `${prompt}, 无文字, 无水印, 高清, high quality`;
+    const fullPrompt = `${prompt}, (masterpiece), (best quality), highres, 8k, simple background`;
+    const negativePrompt = "nsfw, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry, humanoid, human face, girl, boy, man, woman";
 
     // Detect if we are likely using a Native MiniMax/SeaDream model
     const isNativePayload = IMAGE_MODEL.toLowerCase().includes('seedream') || IMAGE_MODEL.toLowerCase().includes('minimax');
 
     // 构造请求体
     let requestBody: any;
-    
+    let endpoint = "";
+
     if (isNativePayload) {
         // --- SeaDream / MiniMax Native Structure ---
         requestBody = {
             model: IMAGE_MODEL,
             request_id: generateUUID(),
             payload: {
-                prompt: fullPrompt,
+                prompt: fullPrompt + " --no " + negativePrompt, // In-prompt negative since API doesn't support param
                 size: "1024x1024", 
                 seed: randomSeed,
-                guidance_scale: 2.5, // Fixed per user request
+                guidance_scale: 2.5,
                 add_watermark: false,
                 response_format: "url"
             }
         };
+
+        // --- Endpoint Strategy for Native ---
+        // Native MiniMax usually expects: host/v1/text_to_image
+        // We strip /v1 from the base URL if it exists, then append /v1/text_to_image manually
+        // to ensure we get the structure right regardless of user input.
+        const rootUrl = IMAGE_BASE_URL.replace(/\/v1\/?$/, '').replace(/\/+$/, '');
+        endpoint = `${rootUrl}/v1/text_to_image`;
+
     } else {
         // --- Standard OpenAI Structure ---
         requestBody = {
@@ -143,25 +168,17 @@ async function fetchImageGeneration(prompt: string): Promise<string> {
             n: 1,
             size: "1024x1024"
         };
+
+        // Standard OpenAI endpoint logic
+        const baseUrl = IMAGE_BASE_URL.endsWith('/v1') ? IMAGE_BASE_URL : `${IMAGE_BASE_URL}/v1`;
+        endpoint = `${baseUrl}/images/generations`;
     }
 
-    // Smart Endpoint Selection
-    // Ensure no double slashes if base url ends with /
-    const baseUrl = IMAGE_BASE_URL.replace(/\/+$/, '');
-    
-    const primaryEndpoint = isNativePayload 
-        ? `${baseUrl}/text_to_image` 
-        : `${baseUrl}/images/generations`;
+    console.log(`[Image API] Sending Request to: ${endpoint}`);
+    console.log(`[Image API] Payload:`, JSON.stringify(requestBody, null, 2));
 
-    const fallbackEndpoint = isNativePayload 
-        ? `${baseUrl}/images/generations` 
-        : `${baseUrl}/text_to_image`;
-
-    const tryFetch = async (url: string) => {
-        console.log(`[Image API] Sending Request to: ${url}`);
-        console.log(`[Image API] Payload:`, JSON.stringify(requestBody, null, 2)); // DEBUG PAYLOAD
-
-        const response = await fetch(url, {
+    try {
+        const response = await fetch(endpoint, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -169,17 +186,6 @@ async function fetchImageGeneration(prompt: string): Promise<string> {
             },
             body: JSON.stringify(requestBody)
         });
-        return response;
-    };
-
-    try {
-        let response = await tryFetch(primaryEndpoint);
-
-        // 如果主端点 404，尝试备用端点
-        if (response.status === 404) {
-             console.warn(`[Image API] Endpoint 404. Switching to fallback: ${fallbackEndpoint}`);
-             response = await tryFetch(fallbackEndpoint);
-        }
 
         if (!response.ok) {
              const errText = await response.text();
@@ -189,14 +195,20 @@ async function fetchImageGeneration(prompt: string): Promise<string> {
         }
         
         const data = await response.json();
-        console.log("[Image API] Success Data:", data); // DEBUG RESPONSE
+        console.log("[Image API] Success Data:", data); 
         
         // 1. SeaDream/MiniMax specific: outcome.media_urls
         if (data.outcome && data.outcome.media_urls && data.outcome.media_urls.length > 0) {
             return data.outcome.media_urls[0].url;
         }
+        
+        // 2. Some providers wrap it in 'base_resp'
+        if (data.base_resp && data.base_resp.status_msg === 'success' && data.reply) {
+             // Try to parse reply if it looks like standard format, otherwise check custom fields
+             // (This is rare but some gateways do it)
+        }
 
-        // 2. Standard OpenAI: data[0].url
+        // 3. Standard OpenAI: data[0].url
         if (data.data && data.data[0]) {
             if (data.data[0].url) return data.data[0].url;
             if (data.data[0].b64_json) return `data:image/jpeg;base64,${data.data[0].b64_json}`;
@@ -215,15 +227,8 @@ async function fetchImageGeneration(prompt: string): Promise<string> {
 
 // --- Dictionary & Note Taking ---
 export const queryDictionary = async (userInput: string) => {
-  const systemPrompt = `You are a helpful dictionary assistant for language learners.
-  Output strictly valid JSON only. No markdown.
-  Structure:
-  {
-      "identifiedWord": "The core word being asked about (string)",
-      "definition": "Simple definition (string)",
-      "example": "Short example sentence (string)",
-      "translation": "Chinese translation (string)"
-  }`;
+  const systemPrompt = `You are a helpful dictionary assistant. Output JSON.
+  { "identifiedWord": "string", "definition": "string", "example": "string", "translation": "Chinese string" }`;
   
   try {
       const result = await fetchTextCompletion(systemPrompt, `Define: "${userInput}"`, true);
@@ -240,11 +245,11 @@ export const queryDictionary = async (userInput: string) => {
  */
 export const generateCardImage = async (word: string, context?: string): Promise<string> => {
   try {
-    const prompt = `扁平化矢量插图，教科书风格。画面内容：${word}。语境：${context}。背景纯白。构图简单清晰。`;
+    const prompt = `vector icon of ${word}, ${context}, flat design, minimalist, white background, app icon style, high quality, no text`;
     return await fetchImageGeneration(prompt);
   } catch (e) {
     console.error("Card Image Error - Using Fallback:", e);
-    return `https://placehold.co/600x400/FFA500/FFFFFF/png?text=${encodeURIComponent(word)}`; 
+    return getPlaceholder(word, "#FFA500");
   }
 };
 
@@ -255,24 +260,23 @@ export const generatePetSprite = async (stage: number): Promise<string> => {
     let prompt = '';
 
     if (stage === 0) {
-        // Stage 0: 强制静物
-        prompt = `3D渲染图，一枚圆形的神秘金蛋，静物摄影，放置在桌子上，高光材质，无五官，无手脚，无生命体特征。`;
+        // Stage 0: 强制静物 - 3D Icon
+        prompt = `3D render icon of a mysterious round golden egg, smooth texture, shiny, isometric view, on white background, 3d game asset, no face, no eyes, no limbs, inanimate object`;
     } else {
         // Stage 1+: 毛绒玩具
         let description = "";
-        if (stage === 1) description = "一个黄色的Q版毛绒公仔";
-        if (stage === 2) description = "一只狐狸造型的毛绒玩偶";
-        if (stage === 3) description = "一只神兽造型的手办模型";
+        if (stage === 1) description = "cute yellow round monster plushie";
+        if (stage === 2) description = "fox plushie toy";
+        if (stage === 3) description = "mythical beast figurine";
 
-        prompt = `3D产品特写，${description}，可爱的玩具，柔和影棚光，纯色背景，无人类特征。`;
+        prompt = `3D render of ${description}, cute, soft lighting, isometric view, white background, blind box style, no human, animal shape`;
     }
 
     try {
         return await fetchImageGeneration(prompt);
     } catch (e) {
         console.error("Pet Sprite Error - Using Fallback:", e);
-        if (stage === 0) return "https://placehold.co/400x400/FFD700/FFFFFF/png?text=Egg";
-        return `https://placehold.co/400x400/FFA500/FFFFFF/png?text=Pet+${stage}`;
+        return getPlaceholder(stage === 0 ? "Egg" : `Pet Lv.${stage}`, "#FFD700");
     }
 }
 
@@ -282,11 +286,8 @@ export const generatePetReaction = async (
   stats: any, 
   trigger: 'greeting' | 'completed_task' | 'evolving' | 'traveling'
 ) => {
-  const systemPrompt = `You are a virtual pet named ${petState.name}.
-  Output strictly valid JSON.
-  Structure: { "text": "max 15 words cute sentence", "mood": "happy|excited|sleepy|proud" }`;
-
-  const userPrompt = `Current Stage: ${petState.stage}. Trigger Event: ${trigger}. React to the user.`;
+  const systemPrompt = `You are a virtual pet. Output JSON: { "text": "short sentence", "mood": "happy" }`;
+  const userPrompt = `Trigger: ${trigger}. React.`;
 
   try {
     const result = await fetchTextCompletion(systemPrompt, userPrompt, true);
@@ -301,11 +302,10 @@ export const generatePetReaction = async (
  */
 export const generatePostcard = async (petName: string): Promise<string> => {
     try {
-        const prompt = `宫崎骏风格手绘风景画，蓝天白云，青草地，治愈系，低饱和度，画面清晰。`;
+        const prompt = `beautiful landscape painting, ghibli style, blue sky, green grass, peaceful, anime style scenery, high quality`;
         return await fetchImageGeneration(prompt);
     } catch(e) {
         console.error("Postcard Error - Using Fallback:", e);
-        return `https://placehold.co/600x400/87CEEB/FFFFFF/png?text=Travel+Card`;
+        return getPlaceholder("Travel", "#87CEEB");
     }
 }
-
