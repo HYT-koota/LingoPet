@@ -167,11 +167,13 @@ export const queryDictionary = async (userInput: string) => {
 // --- Image Generation Public Methods ---
 export const generateCardImage = async (word: string, context?: string): Promise<string> => {
   try {
-    // UPDATED PROMPT (Chinese): 吉卜力/治愈系插画风格
-    const prompt = `一张高质量、柔和的数字插画，描绘内容：“${word}”。
+    // UPDATED PROMPT (Chinese): 极致清晰风格 (Sharp/High-Def)
+    // Removed "soft/Ghibli" to avoid blur. Added "Macro/Product Shot/8k".
+    const prompt = `一张极度清晰、锐利的摄影级图像，描绘内容：“${word}”。
     语境：${context}。
-    风格：宫崎骏吉卜力风格，治愈系，粉彩配色，柔和光照，杰作，4k分辨率，高细节。
-    构图：居中，干净的米白色背景。无文字。`;
+    风格：国家地理杂志级别的微距摄影，或者是电影级高精度的3D产品渲染。
+    画质：8K超高清，HDR，纹理细节丰富，锐利聚焦（Sharp Focus），高对比度，色彩鲜艳。
+    构图：主体居中，背景干净整洁，不要任何文字。`;
     
     return await fetchImageGeneration(prompt);
   } catch (e) {
@@ -182,20 +184,31 @@ export const generateCardImage = async (word: string, context?: string): Promise
 
 export const generatePetSprite = async (stage: number): Promise<string> => {
     let description = '';
-    switch(stage) {
-        case 0: description = "神秘的发光魔法蛋，带有金色符文图案，散发着神秘光环"; break;
-        case 1: description = "可爱的圆形幼年生物（类似宝可梦风格），小巧嘟嘟，黄色和奶油色的皮毛，大眼睛"; break;
-        case 2: description = "少年期的奇幻生物，正在进化的特征，充满活力的姿势，黄色和橙色的发光点缀"; break;
-        case 3: description = "威严的守护神兽，带有金色盔甲元素，飘逸的尾巴，既强大又可爱"; break;
-        default: description = "可爱的精灵生物";
+    let styleKeywords = '';
+
+    // Specialized logic to ensure the Egg looks like an EGG, not a person.
+    if (stage === 0) {
+        description = "一颗放置在底座上的神秘魔法蛋。纯粹的蛋形物体，表面有发光的金色符文纹理。";
+        // STRICT constraints for the egg
+        styleKeywords = "风格：写实级C4D渲染，游戏道具设计，静物特写(Still Life)。负面约束：绝对不要长出五官，不要脸，不要手脚，不要人类特征，不要Q版人偶。";
+    } else {
+        // Logic for creatures (Baby/Teen/Adult)
+        switch(stage) {
+            case 1: description = "一只圆滚滚的幼年小怪兽（非人类），像皮卡丘或史莱姆，毛茸茸，黄色奶油色，大眼睛"; break;
+            case 2: description = "一只少年期的奇幻生物（四足兽），正在进化，充满活力的姿势，身上有发光斑纹"; break;
+            case 3: description = "一只威严的成年神兽，像龙或麒麟，金色盔甲，飘逸的尾巴，神圣感"; break;
+            default: description = "奇幻生物";
+        }
+        // Keywords for creatures
+        styleKeywords = "风格：皮克斯(Pixar)电影级别3D渲染，宝可梦(Pokemon)风格，精致的毛发和光泽，明亮的摄影棚光效，白色背景。";
     }
 
     try {
-        // UPDATED PROMPT (Chinese): 盲盒/泡泡玛特 3D 风格
-        const prompt = `一张高质量的3D渲染图，内容是：${description}。
-        风格：盲盒玩具设计，泡泡玛特(Pop Mart)风格，C4D渲染，OC渲染，粘土材质，柔和摄影棚光效，可爱，Q版比例。
-        视角：等轴正视图。
-        背景：纯白背景，干净无杂物。`;
+        const prompt = `一张高质量的3D渲染图。
+        内容：${description}
+        ${styleKeywords}
+        视角：等轴正视图(Isometric)，全身照。
+        画质：8K分辨率，超清晰，无噪点。`;
         
         return await fetchImageGeneration(prompt);
     } catch (e) {
@@ -227,10 +240,12 @@ export const generatePetReaction = async (
 export const generatePostcard = async (petName: string): Promise<string> => {
     // Postcards are images
     try {
-        // UPDATED PROMPT (Chinese): 新海诚/二次元风景风格
-        const prompt = `一张令人惊叹的著名世界地标风景数字绘画。
-        风格：新海诚动漫背景风格，充满活力的蓝天，电影级光效，高度细节，杰作。
-        前景：一只黄色的小型奇幻萌物（宠物）正在自拍或躲在场景中。`;
+        // UPDATED PROMPT (Chinese): 清晰的风景
+        const prompt = `一张令人惊叹的、极其清晰的旅行风景照片。
+        内容：著名的世界地标。
+        风格：新海诚(Makoto Shinkai)超高清动画电影背景，或者国家地理摄影。
+        画质：8K分辨率，光影层次丰富，细节锐利。
+        前景：画面角落藏着一只小小的黄色奇幻生物（背影或侧影）。`;
         return await fetchImageGeneration(prompt);
     } catch(e) {
         return `https://picsum.photos/seed/travel-${Date.now()}/600/400`;
