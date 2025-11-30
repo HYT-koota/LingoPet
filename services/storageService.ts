@@ -1,4 +1,5 @@
 
+
 import { DailyStats, PetState, PetStage, WordEntry } from '../types';
 
 const KEYS = {
@@ -59,9 +60,9 @@ export const getPetState = (): PetState => {
       if (!parsed.imageUrls) parsed.imageUrls = {};
       
       // --- CACHE BUSTING FIX ---
-      // If we are at stage 0 (Egg) and have an image, clear it to force regeneration
-      // This solves the issue where the user is stuck seeing the "Ugly/Humanoid" egg from previous failed attempts.
-      if (parsed.stage === PetStage.EGG && parsed.imageUrls[0]) {
+      // Force clear the Egg image (Stage 0) every time to fix the "Ugly/Humanoid" cache issue.
+      // This ensures the user sees the new API result immediately on refresh.
+      if (parsed.stage === PetStage.EGG) {
          delete parsed.imageUrls[0];
       }
       

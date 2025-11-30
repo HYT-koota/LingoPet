@@ -13,8 +13,8 @@ const TEXT_MODEL = cleanVal(process.env.TEXT_API_MODEL) || 'gpt-3.5-turbo';
 
 // 2. Image Configuration (Visuals / Pet Sprites)
 const IMAGE_KEY = cleanVal(process.env.IMAGE_API_KEY);
-const IMAGE_BASE_URL = cleanUrl(process.env.IMAGE_API_BASE_URL) || 'https://api.openai.com/v1';
-const IMAGE_MODEL = cleanVal(process.env.IMAGE_API_MODEL) || 'dall-e-3';
+const IMAGE_BASE_URL = cleanUrl(process.env.IMAGE_API_BASE_URL) || 'https://api.gmi-serving.com/v1';
+const IMAGE_MODEL = cleanVal(process.env.IMAGE_API_MODEL) || 'seedream-3-0-t2i-250415';
 
 // Diagnostics for UI
 export const CURRENT_CONFIG = {
@@ -45,23 +45,13 @@ function parseJSON(text: string) {
     }
 }
 
-// --- Helper: Generate UUID (Safe) ---
-function generateUUID() {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-        return crypto.randomUUID();
-    }
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-    });
-}
-
 // --- Helper: Create Clean SVG Placeholder ---
 function getPlaceholder(text: string, color: string = "#E5E7EB") {
     const svg = `
     <svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
         <rect width="512" height="512" fill="#F9FAFB"/>
         <rect x="156" y="156" width="200" height="200" rx="40" fill="${color}" opacity="0.2"/>
+        <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="24" fill="${color}" opacity="0.6">${text}</text>
         <path d="M256 200 L256 312 M200 256 L312 256" stroke="${color}" stroke-width="20" stroke-linecap="round" opacity="0.4"/>
     </svg>`;
     return `data:image/svg+xml;base64,${btoa(svg)}`;
@@ -122,32 +112,64 @@ async function fetchTextCompletion(
 async function fetchImageGeneration(prompt: string): Promise<string> {
     if (!IMAGE_KEY) throw new Error("Image API Key is missing");
 
-    // Smart Endpoint Construction
-    // If user provided a full path (e.g. gmi-serving/v1/images/generations), use it.
-    // If they provided a base (e.g. gmi-serving/v1), append /images/generations
+    // --- SMART ROUTING LOGIC ---
     let endpoint = IMAGE_BASE_URL;
-    if (!endpoint.endsWith('generations')) {
-        // Check if it already has /v1
-        const base = endpoint.endsWith('/v1') ? endpoint : `${endpoint}/v1`;
-        endpoint = `${base}/images/generations`;
+    const isSeaDream = IMAGE_MODEL.toLowerCase().includes('seedream') || IMAGE_MODEL.toLowerCase().includes('minimax');
+    
+    // Determine Endpoint based on Model Type
+    if (isSeaDream) {
+        // STRATEGY: Native GMI/MiniMax Endpoint (/text_to_image)
+        // We strip '/images/generations' or '/v1' from the env var to get the raw host, then append correct path
+        
+        let base = endpoint;
+        // Strip common suffixes to find the root/v1 base
+        base = base.replace(/\/images\/generations\/?$/, '');
+        base = base.replace(/\/v1\/?$/, ''); 
+        
+        // Reconstruct Native Endpoint
+        endpoint = `${base}/v1/text_to_image`;
+    } else {
+        // STRATEGY: Standard OpenAI Endpoint (/images/generations)
+        if (!endpoint.endsWith('generations')) {
+             const base = endpoint.endsWith('/v1') ? endpoint : `${endpoint}/v1`;
+             endpoint = `${base}/images/generations`;
+        }
     }
-    // Clean double slashes
+    
+    // Clean double slashes (but keep http://)
     endpoint = endpoint.replace(/([^:]\/)\/+/g, "$1");
 
     // Safe 32-bit Integer for Seed
     const randomSeed = Math.floor(Math.random() * 2147483647);
 
-    // Payload - Flattened for OpenAI-compatible gateways
-    // We increased guidance_scale to 7.5 to strict adherence (Fixing the "face on egg" issue)
-    const requestBody = {
-        model: IMAGE_MODEL,
-        prompt: prompt,
-        n: 1,
-        size: "1024x1024",
-        response_format: "url",
-        seed: randomSeed,
-        guidance_scale: 7.5, // INCREASED from 2.5 to 7.5 to force model to listen to "NO FACE"
-    };
+    // --- PAYLOAD CONSTRUCTION ---
+    let requestBody: any = {};
+
+    if (isSeaDream) {
+        // NATIVE STRUCTURE: { model, payload: { ... } }
+        requestBody = {
+            model: IMAGE_MODEL,
+            payload: {
+                prompt: prompt,
+                size: "1024x1024",
+                response_format: "url",
+                seed: randomSeed,
+                guidance_scale: 5.0, 
+                // Negative prompt is crucial for SeaDream to avoid faces, but handled inside prompt text if API doesn't support param
+                // We add it here just in case the gateway supports it
+                negative_prompt: "human, face, person, man, woman, child, text, watermark, bad quality, blurry, distorted"
+            }
+        };
+    } else {
+        // OPENAI STANDARD STRUCTURE
+        requestBody = {
+            model: IMAGE_MODEL,
+            prompt: prompt,
+            n: 1,
+            size: "1024x1024",
+            response_format: "url",
+        };
+    }
 
     console.log(`[Image API] Endpoint: ${endpoint}`);
     console.log(`[Image API] Payload:`, JSON.stringify(requestBody, null, 2));
@@ -166,18 +188,18 @@ async function fetchImageGeneration(prompt: string): Promise<string> {
              const errText = await response.text();
              console.error(`[Image API CRITICAL ERROR] Status: ${response.status}`);
              console.error(`[Image API CRITICAL ERROR] Body: ${errText}`);
-             throw new Error(`Image API Failed (${response.status})`);
+             throw new Error(`Image API Failed (${response.status}): ${errText.substring(0, 100)}`);
         }
         
         const data = await response.json();
         
-        // 1. Standard OpenAI
+        // 1. Standard OpenAI Response
         if (data.data && data.data[0]) {
             if (data.data[0].url) return data.data[0].url;
             if (data.data[0].image_url) return data.data[0].image_url;
         }
         
-        // 2. GMI Native / Custom Formats
+        // 2. GMI Native / SeaDream Response
         if (data.outcome && data.outcome.media_urls && data.outcome.media_urls.length > 0) {
             return data.outcome.media_urls[0].url;
         }
@@ -208,8 +230,8 @@ export const queryDictionary = async (userInput: string) => {
 
 export const generateCardImage = async (word: string, context?: string): Promise<string> => {
   try {
-    // 强制“吉卜力插画” + “中文语义”，确保 SeaDream 能听懂且不画糊
-    const prompt = `吉卜力动画风格插画，极简主义，手绘，清晰的线条，高分辨率，生动。画面内容：${word} (${context})。纯色背景，不要文字，不要水印。`;
+    // 强制“吉卜力/新海诚”风格，保证清晰好看
+    const prompt = `吉卜力手绘风格插画，清新的色彩，${word} (${context})。画面清晰，极简主义，宫崎骏动画背景，高分辨率，无文字。`;
     return await fetchImageGeneration(prompt);
   } catch (e) {
     console.error("Card Image Error:", e);
@@ -221,18 +243,18 @@ export const generatePetSprite = async (stage: number): Promise<string> => {
     let prompt = '';
 
     if (stage === 0) {
-        // Stage 0: EGG -> PURE GEOMETRIC FIX
-        // "魔法" "水晶" might trigger fantasy characters. 
-        // We use "Yellow Ball" and "Product Photo" to enforce object nature.
-        prompt = `一个黄色的圆形宝石球，光滑表面，放置在白色背景上。产品摄影，特写镜头，高分辨率，极简主义。绝对不是人，没有脸，没有五官，没有四肢，仅仅是一个球体。`;
+        // Stage 0: EGG -> FORCE GEOMETRIC OBJECT
+        // Using "Sphere" (圆球) instead of Egg to prevent face generation.
+        // Adding "Gemstone" (宝石) and "Glass" (玻璃) to enforce object material.
+        prompt = `一个晶莹剔透的黄色水晶球 (Yellow Crystal Sphere)，置于纯白背景上。3D渲染，C4D风格，玻璃材质，光滑，反光。特写镜头，极简主义。绝非生物，没有五官，没有手脚，纯粹的静物摄影。`;
     } else {
-        // Stage 1+: PLUSHIE FIX
+        // Stage 1+: PLUSHIE / TOY
         let description = "";
-        if (stage === 1) description = "黄色小鸡形状的毛绒公仔";
-        if (stage === 2) description = "橙色小狐狸形状的软胶玩具";
-        if (stage === 3) description = "神秘生物造型的精美手办";
+        if (stage === 1) description = "黄色小鸡形状的毛绒公仔 (Plushie toy)";
+        if (stage === 2) description = "橙色小狐狸形状的软胶玩具 (Vinyl toy)";
+        if (stage === 3) description = "传说中的神秘生物精致手办 (Figurine)";
 
-        prompt = `3D渲染图标，${description}，纯色背景，工作室灯光，C4D，Octane渲染，超高清，可爱，Q版。无水印。`;
+        prompt = `3D渲染盲盒风格，${description}，纯色背景，柔和影棚光，可爱，高品质材质，无水印。`;
     }
 
     try {
@@ -262,9 +284,9 @@ export const generatePetReaction = async (
 
 export const generatePostcard = async (petName: string): Promise<string> => {
     try {
-        const prompt = `新海诚风格风景画，旅行明信片，蓝天白云，治愈系，高画质，细腻的光影，无文字。`;
+        const prompt = `宫崎骏风格手绘风景画，旅行明信片，蓝天白云草地，清新自然，治愈系，高分辨率，无文字。`;
         return await fetchImageGeneration(prompt);
     } catch(e) {
         return getPlaceholder("Travel", "#60A5FA");
     }
-}
+};
