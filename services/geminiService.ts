@@ -106,33 +106,51 @@ async function fetchTextCompletion(
 async function fetchImageGeneration(prompt: string): Promise<string> {
     if (!IMAGE_KEY) throw new Error("Image API Key is missing");
 
-    const endpoint = `${IMAGE_BASE_URL}/images/generations`; 
-
-    // 修复 Seed：使用 Signed 32-bit Integer Max (2,147,483,647) 以防服务器溢出
+    // 修复 Seed：使用 Signed 32-bit Integer Max (2,147,483,647)
     const randomSeed = Math.floor(Math.random() * 2147483647);
 
-    // 将负面约束直接加入 Prompt，因为 API Payload 不支持 negative_prompt 字段
-    const fullPrompt = `${prompt} (禁止内容：模糊、低画质、人脸、文字、水印、扭曲、多余的手指、jpeg噪点)`;
+    // 将负面约束直接加入 Prompt (中文自然语言)
+    const fullPrompt = `${prompt} (画面清晰，无模糊，无文字，无水印，无多余手指，无扭曲)`;
 
-    try {
-        console.log(`[Image API] Sending request to: ${endpoint} | Model: ${IMAGE_MODEL} | Prompt: ${fullPrompt.substring(0, 50)}...`);
+    // Detect if we are likely using a Native MiniMax/SeaDream model
+    const isNativePayload = IMAGE_MODEL.toLowerCase().includes('seedream') || IMAGE_MODEL.toLowerCase().includes('minimax');
 
-        // --- SeaDream / MiniMax Structure (Strict Adherence to Screenshot) ---
-        // 严格遵守文档截图：model, request_id, payload { prompt, size, seed, guidance_scale, add_watermark, response_format }
-        // 绝对不要发送 negative_prompt 字段，否则会报 400 错误
-        const requestBody = {
+    // 构造请求体
+    let requestBody: any;
+    
+    if (isNativePayload) {
+        // --- SeaDream / MiniMax Native Structure ---
+        // 严格遵守原生文档: payload 嵌套
+        requestBody = {
             model: IMAGE_MODEL,
             request_id: crypto.randomUUID(),
             payload: {
                 prompt: fullPrompt,
                 size: "1024x1024", 
                 seed: randomSeed,
-                guidance_scale: 2.5, // 官方文档默认值
+                guidance_scale: 2.5, // 官方推荐值
                 add_watermark: false,
                 response_format: "url"
             }
         };
+    } else {
+        // --- Standard OpenAI Structure ---
+        requestBody = {
+            model: IMAGE_MODEL,
+            prompt: fullPrompt,
+            n: 1,
+            size: "1024x1024"
+        };
+    }
 
+    // Smart Endpoint Selection
+    // 如果是原生 Payload，优先尝试原生路径 /text_to_image
+    // 否则默认尝试 OpenAI 路径 /images/generations
+    const primaryEndpointSuffix = isNativePayload ? '/text_to_image' : '/images/generations';
+    const fallbackEndpointSuffix = isNativePayload ? '/images/generations' : '/text_to_image';
+
+    const tryFetch = async (endpoint: string) => {
+        console.log(`[Image API] Attempting: ${endpoint} | Model: ${IMAGE_MODEL}`);
         const response = await fetch(endpoint, {
             method: 'POST',
             headers: {
@@ -141,16 +159,22 @@ async function fetchImageGeneration(prompt: string): Promise<string> {
             },
             body: JSON.stringify(requestBody)
         });
+        return response;
+    };
+
+    try {
+        let response = await tryFetch(`${IMAGE_BASE_URL}${primaryEndpointSuffix}`);
+
+        // 如果主端点 404，尝试备用端点
+        if (response.status === 404) {
+             console.warn(`[Image API] Primary endpoint 404. Retrying with fallback: ${IMAGE_BASE_URL}${fallbackEndpointSuffix}`);
+             response = await tryFetch(`${IMAGE_BASE_URL}${fallbackEndpointSuffix}`);
+        }
 
         if (!response.ok) {
              const errText = await response.text();
              console.error(`[Image API Error] Status: ${response.status}`, errText);
-             if (response.status === 400) {
-                 console.warn("API 400 Error. Usually means invalid parameters. Fallback triggered.");
-                 // 不要在这里立刻 fallback 递归，直接抛出异常让上层处理显示占位图
-                 throw new Error("Image API Parameters Invalid: " + errText);
-             }
-             throw new Error("Image API Failed: " + errText);
+             throw new Error(`Image API Failed (${response.status}): ${errText}`);
         }
         
         const data = await response.json();
@@ -172,7 +196,7 @@ async function fetchImageGeneration(prompt: string): Promise<string> {
         throw new Error("No image data received in response");
     } catch (e) {
         console.warn("Image Generation Failed:", e);
-        throw e; // Throw to trigger fallback in caller
+        throw e; 
     }
 }
 
@@ -203,14 +227,14 @@ export const queryDictionary = async (userInput: string) => {
  */
 export const generateCardImage = async (word: string, context?: string): Promise<string> => {
   try {
-    // 纯中文自然语言提示词
-    const prompt = `一张色彩鲜艳、设计简洁的扁平化矢量插画。画面清晰描绘了"${word}"这个概念。${context ? `场景：${context}` : ""}。风格是现代极简主义，类似Duolingo的插画风格。纯色背景。线条锐利。`;
+    // 纯中文自然语言提示词 (新海诚/吉卜力风格，确保清晰)
+    const prompt = `一张插画，风格是清晰的扁平化矢量图。画面内容是"${word}"。${context ? `语境是：${context}` : ""}。背景纯净，线条简单明快，色彩鲜艳，类似于教科书插图。不要模糊，不要写实照片。`;
     
     return await fetchImageGeneration(prompt);
   } catch (e) {
     console.warn("Using fallback image due to API error");
-    // Fallback: Lorem Picsum (Generic high quality photo) instead of Emoji
-    return `https://picsum.photos/seed/${word}/400/300`; 
+    // Fallback: Generic pattern to indicate error but look clean
+    return `https://placehold.co/600x400/FFA500/FFFFFF/png?text=${word}`; 
   }
 };
 
@@ -221,25 +245,25 @@ export const generatePetSprite = async (stage: number): Promise<string> => {
     let prompt = '';
 
     if (stage === 0) {
-        // Stage 0: 必须是静物，不能是生物
-        prompt = `一张专业的静物产品摄影。主体是一枚光滑的圆形魔法宝石，放置在白色的展示台上。材质是发光的玉石，主要颜色是琥珀黄。这是一个无生命的物体，没有五官，没有手脚，纯粹的球体。3D渲染，C4D，超清，8K分辨率。`;
+        // Stage 0: 必须是静物 (Sphere/Gemstone)
+        prompt = `一张静物特写。主体是一个圆形的金色魔法球，或者发光的宝石蛋。它是一个物体，放在桌子上。表面光滑，有魔法光泽。没有眼睛，没有嘴巴，没有手脚。3D渲染，C4D风格。`;
     } else {
-        // Stage 1+: 毛绒玩具
+        // Stage 1+: 毛绒公仔 (Plushie) 防止拟人化
         let description = "";
-        if (stage === 1) description = "一只圆形的Q版黄色小毛绒球";
-        if (stage === 2) description = "一只可爱的狐狸毛绒公仔";
-        if (stage === 3) description = "一只帅气的神兽模型玩具";
+        if (stage === 1) description = "一个黄色的圆形毛绒小公仔";
+        if (stage === 2) description = "一只可爱的狐狸毛绒玩偶";
+        if (stage === 3) description = "一只帅气的神兽模型";
 
-        prompt = `一张可爱的3D玩具渲染图。主体是${description}。材质是短毛绒。柔和影棚光。造型圆润。它是玩具公仔，不是生物，没有拟人化的人脸。背景纯净。`;
+        prompt = `一张可爱的3D产品渲染图。主体是${description}。材质是柔软的毛绒。它是一个玩具公仔。背景是纯白色的。灯光柔和。没有人类特征。`;
     }
 
     try {
         return await fetchImageGeneration(prompt);
     } catch (e) {
         console.warn("Using fallback pet sprite due to API error");
-        // Fallback: Using a generic abstract shape instead of a face emoji to avoid confusion
-        if (stage === 0) return "https://ui-avatars.com/api/?name=Egg&background=FFD700&color=fff&rounded=true&length=1&font-size=0.5";
-        return `https://ui-avatars.com/api/?name=Pet&background=FFA500&color=fff&rounded=true`;
+        // Fallback: Abstract colorful circle
+        if (stage === 0) return "https://placehold.co/400x400/FFD700/FFFFFF/png?text=Egg";
+        return `https://placehold.co/400x400/FFA500/FFFFFF/png?text=Pet+${stage}`;
     }
 }
 
@@ -268,10 +292,10 @@ export const generatePetReaction = async (
  */
 export const generatePostcard = async (petName: string): Promise<string> => {
     try {
-        const prompt = `一幅治愈系的风景插画。蓝天白云，清新的街道或自然风光。色彩明亮，宫崎骏风格。没有文字。`;
+        const prompt = `一幅风景画。治愈系动漫风格，宫崎骏风格。蓝天白云，草地，或者宁静的街道。画面清晰，色彩清新。`;
         
         return await fetchImageGeneration(prompt);
     } catch(e) {
-        return `https://picsum.photos/seed/travel-${Date.now()}/600/400`;
+        return `https://placehold.co/600x400/87CEEB/FFFFFF/png?text=Travel+Card`;
     }
 }
