@@ -112,28 +112,17 @@ async function fetchTextCompletion(
 async function fetchImageGeneration(prompt: string): Promise<string> {
     if (!IMAGE_KEY) throw new Error("Image API Key is missing");
 
-    // --- SMART ROUTING LOGIC ---
-    let endpoint = IMAGE_BASE_URL;
     const isSeaDream = IMAGE_MODEL.toLowerCase().includes('seedream') || IMAGE_MODEL.toLowerCase().includes('minimax');
     
-    // Determine Endpoint based on Model Type
-    if (isSeaDream) {
-        // STRATEGY: Native GMI/MiniMax Endpoint (/text_to_image)
-        // We strip '/images/generations' or '/v1' from the env var to get the raw host, then append correct path
-        
-        let base = endpoint;
-        // Strip common suffixes to find the root/v1 base
-        base = base.replace(/\/images\/generations\/?$/, '');
-        base = base.replace(/\/v1\/?$/, ''); 
-        
-        // Reconstruct Native Endpoint
-        endpoint = `${base}/v1/text_to_image`;
-    } else {
-        // STRATEGY: Standard OpenAI Endpoint (/images/generations)
-        if (!endpoint.endsWith('generations')) {
-             const base = endpoint.endsWith('/v1') ? endpoint : `${endpoint}/v1`;
-             endpoint = `${base}/images/generations`;
-        }
+    // --- ENDPOINT CONSTRUCTION ---
+    // We trust the environment variable. If the user put a full path, we use it.
+    // Otherwise, we append standard OpenAI suffix "/images/generations".
+    let endpoint = IMAGE_BASE_URL;
+    
+    // Simple heuristic: If it doesn't end in typical generation paths, append default OpenAI path
+    if (!endpoint.endsWith('generations') && !endpoint.endsWith('text_to_image')) {
+         const base = endpoint.endsWith('/v1') ? endpoint : `${endpoint}/v1`;
+         endpoint = `${base}/images/generations`;
     }
     
     // Clean double slashes (but keep http://)
@@ -147,6 +136,8 @@ async function fetchImageGeneration(prompt: string): Promise<string> {
 
     if (isSeaDream) {
         // NATIVE STRUCTURE: { model, payload: { ... } }
+        // We use this structure because SeaDream/MiniMax requires nested params for seed/guidance
+        // We assume the gateway at 'endpoint' can handle this JSON structure.
         requestBody = {
             model: IMAGE_MODEL,
             payload: {
@@ -154,10 +145,7 @@ async function fetchImageGeneration(prompt: string): Promise<string> {
                 size: "1024x1024",
                 response_format: "url",
                 seed: randomSeed,
-                guidance_scale: 5.0, 
-                // Negative prompt is crucial for SeaDream to avoid faces, but handled inside prompt text if API doesn't support param
-                // We add it here just in case the gateway supports it
-                negative_prompt: "human, face, person, man, woman, child, text, watermark, bad quality, blurry, distorted"
+                guidance_scale: 7.5, // Increased from 5.0 to force adherence (no faces)
             }
         };
     } else {
@@ -199,7 +187,7 @@ async function fetchImageGeneration(prompt: string): Promise<string> {
             if (data.data[0].image_url) return data.data[0].image_url;
         }
         
-        // 2. GMI Native / SeaDream Response
+        // 2. GMI Native / SeaDream Response (Outcome format)
         if (data.outcome && data.outcome.media_urls && data.outcome.media_urls.length > 0) {
             return data.outcome.media_urls[0].url;
         }
@@ -230,8 +218,8 @@ export const queryDictionary = async (userInput: string) => {
 
 export const generateCardImage = async (word: string, context?: string): Promise<string> => {
   try {
-    // 强制“吉卜力/新海诚”风格，保证清晰好看
-    const prompt = `吉卜力手绘风格插画，清新的色彩，${word} (${context})。画面清晰，极简主义，宫崎骏动画背景，高分辨率，无文字。`;
+    // 复习卡片：强调扁平插画，避免糊图
+    const prompt = `扁平化矢量插画，极简风格，${word} (${context})。纯色背景，线条清晰，高饱和度，教育插图，无文字，无模糊。`;
     return await fetchImageGeneration(prompt);
   } catch (e) {
     console.error("Card Image Error:", e);
@@ -244,17 +232,16 @@ export const generatePetSprite = async (stage: number): Promise<string> => {
 
     if (stage === 0) {
         // Stage 0: EGG -> FORCE GEOMETRIC OBJECT
-        // Using "Sphere" (圆球) instead of Egg to prevent face generation.
-        // Adding "Gemstone" (宝石) and "Glass" (玻璃) to enforce object material.
-        prompt = `一个晶莹剔透的黄色水晶球 (Yellow Crystal Sphere)，置于纯白背景上。3D渲染，C4D风格，玻璃材质，光滑，反光。特写镜头，极简主义。绝非生物，没有五官，没有手脚，纯粹的静物摄影。`;
+        // Using "Crystal Ball" and "Gemstone" to avoid biological "Egg"
+        prompt = `一个精致的黄色水晶球 (Yellow Crystal Sphere)，放置在纯白背景上。高品质产品摄影，微距镜头，玻璃材质，反光清晰。它是一个静物，没有生命，没有脸，没有五官，绝对不是角色。`;
     } else {
-        // Stage 1+: PLUSHIE / TOY
+        // Stage 1+: PLUSHIE
         let description = "";
-        if (stage === 1) description = "黄色小鸡形状的毛绒公仔 (Plushie toy)";
-        if (stage === 2) description = "橙色小狐狸形状的软胶玩具 (Vinyl toy)";
-        if (stage === 3) description = "传说中的神秘生物精致手办 (Figurine)";
+        if (stage === 1) description = "黄色小鸡毛绒公仔 (Yellow Chick Plushie)";
+        if (stage === 2) description = "橙色小狐狸毛绒玩具 (Fox Plushie)";
+        if (stage === 3) description = "神秘生物精致手办 (Fantasy Figurine)";
 
-        prompt = `3D渲染盲盒风格，${description}，纯色背景，柔和影棚光，可爱，高品质材质，无水印。`;
+        prompt = `3D渲染盲盒风格，${description}，纯白背景，柔和影棚光，毛绒质感，可爱，无水印，无文字。`;
     }
 
     try {
