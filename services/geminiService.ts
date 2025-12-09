@@ -1,5 +1,4 @@
 
-
 // --- Generic API Service (Split Text & Image) ---
 
 // Helper to clean config values (remove spaces, trailing slashes)
@@ -8,15 +7,21 @@ const cleanVal = (val?: string) => val ? val.trim() : '';
 
 // 1. Text Configuration (Chat / Definitions)
 const TEXT_KEY = cleanVal(process.env.TEXT_API_KEY);
-const TEXT_BASE_URL = cleanUrl(process.env.TEXT_API_BASE_URL) || 'https://api.openai.com/v1';
+let TEXT_BASE_URL = cleanUrl(process.env.TEXT_API_BASE_URL) || 'https://api.openai.com/v1';
+
+// AUTO-FIX: User commonly mistakes Console URL for API URL
+if (TEXT_BASE_URL.includes('console.gmicloud.ai')) {
+    console.warn("⚠️ Detected Console URL in TEXT_API_BASE_URL. Auto-correcting to API URL.");
+    TEXT_BASE_URL = 'https://api.gmicloud.ai/v1';
+}
+
 const TEXT_MODEL = cleanVal(process.env.TEXT_API_MODEL) || 'gpt-3.5-turbo';
 
 // 2. Image Configuration (Visuals / Pet Sprites)
 const IMAGE_KEY = cleanVal(process.env.IMAGE_API_KEY);
 // DIRECT RAW URL: Use exactly what the user provided in Vercel.
-// User MUST provide the full URL, e.g. "https://api.gmi-serving.com/v1/images/generations"
 const IMAGE_FULL_ENDPOINT = cleanUrl(process.env.IMAGE_API_BASE_URL); 
-const IMAGE_MODEL = cleanVal(process.env.IMAGE_API_MODEL) || 'seedream-3-0-t2i-250415';
+const IMAGE_MODEL = cleanVal(process.env.IMAGE_API_MODEL) || 'Kwai-Kolors/Kolors';
 
 // Diagnostics for UI
 export const CURRENT_CONFIG = {
@@ -82,19 +87,18 @@ async function fetchTextCompletion(
         body.response_format = { type: "json_object" };
     }
 
-    // Ensure we handle /v1 correctly for Chat
-    let baseUrl = TEXT_BASE_URL;
-    if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+    // Determine Endpoint
+    let endpoint = TEXT_BASE_URL;
+    if (endpoint.endsWith('/')) endpoint = endpoint.slice(0, -1);
     
-    // If user provided a full chat endpoint, use it. Otherwise append.
-    let endpoint = baseUrl;
+    // Auto-append chat/completions if missing and it looks like a base URL
     if (!endpoint.includes('/chat/completions')) {
         if (!endpoint.endsWith('/v1')) endpoint = `${endpoint}/v1`;
         endpoint = `${endpoint}/chat/completions`;
     }
-    // Clean double slashes
     endpoint = endpoint.replace(/([^:]\/)\/+/g, "$1");
 
+    // PROXY STRATEGY: Try direct first. If CORS fails, try local proxy.
     try {
         const response = await fetch(endpoint, {
             method: 'POST',
@@ -104,65 +108,55 @@ async function fetchTextCompletion(
 
         if (!response.ok) {
             const errText = await response.text();
-            console.error(`[Text API Error] Status: ${response.status}`, errText);
             throw new Error(`Text API Error ${response.status}: ${errText}`);
         }
-
         const data = await response.json();
         return data.choices?.[0]?.message?.content || "";
     } catch (e: any) {
-        console.error("Text API Request Failed:", e);
-        throw e;
+        console.warn("Direct Text API failed, trying Proxy...", e.message);
+        
+        // Fallback: Try Vercel Proxy (fixes CORS)
+        // We construct a local proxy URL: /api/proxy/text/chat/completions
+        try {
+            const proxyUrl = `/api/proxy/text/chat/completions`; 
+            const proxyResponse = await fetch(proxyUrl, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(body)
+            });
+            
+            if (!proxyResponse.ok) {
+                 const errText = await proxyResponse.text();
+                 throw new Error(`Proxy Text API Error ${proxyResponse.status}: ${errText}`);
+            }
+            const data = await proxyResponse.json();
+            return data.choices?.[0]?.message?.content || "";
+        } catch (proxyError: any) {
+             console.error("Both Direct and Proxy Text API failed.", proxyError);
+             throw new Error(`Connection Failed. Please check TEXT_API_BASE_URL. (Tried: ${endpoint})`);
+        }
     }
 }
 
 // --- IMAGE API CALLS ---
 async function fetchImageGeneration(prompt: string): Promise<string> {
     if (!IMAGE_KEY) throw new Error("Image API Key is missing");
-    if (!IMAGE_FULL_ENDPOINT) throw new Error("Image API Base URL is missing. Please set IMAGE_API_BASE_URL to the FULL endpoint URL.");
-
-    // --- ENDPOINT ---
-    // User controls this 100%. No auto-append.
-    const endpoint = IMAGE_FULL_ENDPOINT;
     
-    const randomSeed = Math.floor(Math.random() * 2147483647);
-    const isSeaDream = IMAGE_MODEL.toLowerCase().includes('seedream') || IMAGE_MODEL.toLowerCase().includes('minimax');
-
+    // Default to SiliconFlow proxy if no URL provided, otherwise use user URL
+    let endpoint = IMAGE_FULL_ENDPOINT || '/api/proxy/image/images/generations';
+    
     // --- PAYLOAD ---
-    // We try to support BOTH Standard OpenAI fields (flat) AND GMI Native fields (nested)
-    // because GMI gateways often support parameter pass-through if at the root level.
+    // Standard OpenAI Format (Works for SiliconFlow / Kolors)
     const requestBody: any = {
         model: IMAGE_MODEL,
         prompt: prompt,
         n: 1,
         size: "1024x1024",
-        response_format: "url",
-        // Flattened params (Standard OpenAI-compatible Gateway style)
-        seed: randomSeed,
-        guidance_scale: 7.5, 
+        response_format: "url", 
+        seed: Math.floor(Math.random() * 99999999),
     };
 
-    if (isSeaDream) {
-        // Double-send parameters in nested payload just in case the gateway requires it
-        requestBody.payload = {
-            prompt: prompt,
-            size: "1024x1024",
-            seed: randomSeed,
-            guidance_scale: 7.5
-        };
-    }
-
-    // --- DEBUGGING: GENERATE CURL ---
-    const curlCommand = `curl -X POST "${endpoint}" \\
-  -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer ${IMAGE_KEY.substring(0, 5)}..." \\
-  -d '${JSON.stringify(requestBody)}'`;
-
-    console.log(`%c[Image API DEBUG]`, "color: #0ea5e9; font-weight: bold;");
-    console.log(`Endpoint: ${endpoint}`);
-    console.log(`Full Payload:`, requestBody);
-    console.log(`👇 COPY THIS COMMAND TO TERMINAL TO TEST 👇`);
-    console.log(curlCommand);
+    console.log(`[Image API] Sending to: ${endpoint}`);
 
     try {
         const response = await fetch(endpoint, {
@@ -176,30 +170,52 @@ async function fetchImageGeneration(prompt: string): Promise<string> {
 
         if (!response.ok) {
              const errText = await response.text();
-             console.error(`[Image API Error] Status: ${response.status}`);
-             console.error(`[Image API Error] Response: ${errText}`);
+             console.error(`[Image API Error] Status: ${response.status} Body: ${errText}`);
+             // If direct call fails due to CORS/404, try the proxy if user hasn't hardcoded a proxy yet
+             if (!endpoint.includes('/api/proxy') && (response.status === 0 || response.status === 404)) {
+                 console.log("Attempting fallback to /api/proxy/image...");
+                 return fetchImageGenerationViaProxy(prompt, requestBody);
+             }
              throw new Error(`API Error (${response.status}): ${errText}`);
         }
         
         const data = await response.json();
-        console.log(`[Image API] Success:`, data);
         
-        // 1. Standard OpenAI Response
+        // 1. Standard OpenAI Response (SiliconFlow usually returns data[0].url)
         if (data.data && data.data[0]) {
             if (data.data[0].url) return data.data[0].url;
             if (data.data[0].image_url) return data.data[0].image_url;
         }
         
-        // 2. GMI Native / SeaDream Response
-        if (data.outcome && data.outcome.media_urls && data.outcome.media_urls.length > 0) {
-            return data.outcome.media_urls[0].url;
-        }
-
         throw new Error("No image URL found in response.");
 
     } catch (e) {
         console.error("fetchImageGeneration Exception:", e);
+        // Last ditch effort: Try proxy if the first fail wasn't already the proxy
+        if (!endpoint.includes('/api/proxy')) {
+             return fetchImageGenerationViaProxy(prompt, requestBody);
+        }
         throw e; 
+    }
+}
+
+// Fallback function for images
+async function fetchImageGenerationViaProxy(prompt: string, body: any): Promise<string> {
+    const proxyEndpoint = '/api/proxy/image/images/generations';
+    try {
+        const response = await fetch(proxyEndpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${IMAGE_KEY}`
+            },
+            body: JSON.stringify(body)
+        });
+        if (!response.ok) throw new Error("Proxy failed");
+        const data = await response.json();
+        return data.data?.[0]?.url || "";
+    } catch(e) {
+        throw new Error("Failed to generate image via both Direct and Proxy methods.");
     }
 }
 
@@ -220,8 +236,8 @@ export const queryDictionary = async (userInput: string) => {
 
 export const generateCardImage = async (word: string, context?: string): Promise<string> => {
   try {
-    // Explicit Chinese prompt for GMI models
-    const prompt = `扁平化矢量插画，极简风格，${word} (语境: ${context})。白色背景，高清晰度，教育用途，无文字。`;
+    // Flashcard style: Cute, clean, educational
+    const prompt = `(SiliconFlow Kolors) 极简风格插画，卡通风格，${word} (语境: ${context})。色彩明快，矢量图风格，白色背景，无文字，教育卡片。`;
     return await fetchImageGeneration(prompt);
   } catch (e) {
     console.error("Card Image Error:", e);
@@ -233,16 +249,17 @@ export const generatePetSprite = async (stage: number): Promise<string> => {
     let prompt = '';
 
     if (stage === 0) {
-        // Stage 0: EGG -> Force "Gemstone" to avoid faces
-        prompt = `一个金黄色的圆形宝石，静物摄影，特写镜头，放置在白色背景上。材质是半透明的水晶，表面光滑。仅仅是一个球体，没有脸，没有五官，没有手脚，不是角色，不是生物。`;
+        // Stage 0: EGG - Cute Cartoon Style
+        prompt = `(SiliconFlow Kolors) 一颗可爱的神奇宠物蛋，卡通风格，蛋壳上有发光的金色星星花纹。柔和的暖光，吉卜力动画风格，治愈系插画，3D渲染，圆润可爱，白色背景，无文字。`;
     } else {
-        // Stage 1+: PLUSHIE
+        // Stage 1+: Cute Character
         let description = "";
-        if (stage === 1) description = "可爱的小鸡毛绒公仔 (cute yellow chick plushie)";
-        if (stage === 2) description = "橙色的小狐狸毛绒玩具 (orange fox plushie)";
-        if (stage === 3) description = "幻想生物手办 (fantasy creature figurine)";
+        if (stage === 1) description = "一只超级可爱的Q版小鸡，圆滚滚的身体 (cute round chick)";
+        if (stage === 2) description = "一只淘气的Q版橙色小狐狸，大大的眼睛 (cute orange fox chibi)";
+        if (stage === 3) description = "一只华丽的梦幻生物，发光的翅膀 (fantasy creature with glowing wings)";
 
-        prompt = `3D渲染，毛绒玩具质感，${description}。柔和的影棚光，白色背景，无文字。Q版风格，可爱。`;
+        // Style: Pop Mart / Disney / Pixar style
+        prompt = `(SiliconFlow Kolors) 3D盲盒潮玩风格，${description}。皮克斯动画风格，精致的色彩，柔和的影棚光，白色背景，无文字，正面特写，超级可爱。`;
     }
 
     try {
@@ -272,7 +289,7 @@ export const generatePetReaction = async (
 
 export const generatePostcard = async (petName: string): Promise<string> => {
     try {
-        const prompt = `宫崎骏风格风景画，美丽的旅行风景，蓝天白云，治愈系插画。无文字。`;
+        const prompt = `(SiliconFlow Kolors) 新海诚风格风景画，美丽的旅行风景，蓝天白云，动漫风格，色彩鲜艳，治愈系。无文字。`;
         return await fetchImageGeneration(prompt);
     } catch(e) {
         return getPlaceholder("Travel", "#60A5FA");

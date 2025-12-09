@@ -1,8 +1,12 @@
 {
   "rewrites": [
     {
-      "source": "/gmi-proxy/:path*",
+      "source": "/api/proxy/text/:path*",
       "destination": "https://api.gmicloud.ai/v1/:path*"
+    },
+    {
+      "source": "/api/proxy/image/:path*",
+      "destination": "https://api.siliconflow.cn/v1/:path*"
     }
   ]
 }
