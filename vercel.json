@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/gmi-proxy/:path*",
+      "destination": "https://api.gmicloud.ai/v1/:path*"
+    }
+  ]
+}

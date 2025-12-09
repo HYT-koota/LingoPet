@@ -3,7 +3,7 @@
 // --- Generic API Service (Split Text & Image) ---
 
 // Helper to clean config values (remove spaces, trailing slashes)
-const cleanUrl = (url?: string) => url ? url.trim().replace(/\/+$/, '') : '';
+const cleanUrl = (url?: string) => url ? url.trim() : ''; 
 const cleanVal = (val?: string) => val ? val.trim() : '';
 
 // 1. Text Configuration (Chat / Definitions)
@@ -13,7 +13,9 @@ const TEXT_MODEL = cleanVal(process.env.TEXT_API_MODEL) || 'gpt-3.5-turbo';
 
 // 2. Image Configuration (Visuals / Pet Sprites)
 const IMAGE_KEY = cleanVal(process.env.IMAGE_API_KEY);
-const IMAGE_BASE_URL = cleanUrl(process.env.IMAGE_API_BASE_URL) || 'https://api.gmi-serving.com/v1';
+// DIRECT RAW URL: Use exactly what the user provided in Vercel.
+// User MUST provide the full URL, e.g. "https://api.gmi-serving.com/v1/images/generations"
+const IMAGE_FULL_ENDPOINT = cleanUrl(process.env.IMAGE_API_BASE_URL); 
 const IMAGE_MODEL = cleanVal(process.env.IMAGE_API_MODEL) || 'seedream-3-0-t2i-250415';
 
 // Diagnostics for UI
@@ -27,15 +29,12 @@ export const CURRENT_CONFIG = {
 // --- Helper: Clean JSON ---
 function parseJSON(text: string) {
     try {
-        // Attempt strict parse
         return JSON.parse(text);
     } catch (e) {
-        // Fallback: Try to extract JSON from code blocks ```json ... ```
         const match = text.match(/```json([\s\S]*?)```/);
         if (match && match[1]) {
             try { return JSON.parse(match[1]); } catch(err) {}
         }
-        // Fallback: Try to find the first { and last }
         const first = text.indexOf('{');
         const last = text.lastIndexOf('}');
         if (first >= 0 && last > first) {
@@ -84,8 +83,17 @@ async function fetchTextCompletion(
     }
 
     // Ensure we handle /v1 correctly for Chat
-    const baseUrl = TEXT_BASE_URL.endsWith('/v1') ? TEXT_BASE_URL : `${TEXT_BASE_URL}/v1`;
-    const endpoint = `${baseUrl}/chat/completions`.replace(/([^:]\/)\/+/g, "$1");
+    let baseUrl = TEXT_BASE_URL;
+    if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+    
+    // If user provided a full chat endpoint, use it. Otherwise append.
+    let endpoint = baseUrl;
+    if (!endpoint.includes('/chat/completions')) {
+        if (!endpoint.endsWith('/v1')) endpoint = `${endpoint}/v1`;
+        endpoint = `${endpoint}/chat/completions`;
+    }
+    // Clean double slashes
+    endpoint = endpoint.replace(/([^:]\/)\/+/g, "$1");
 
     try {
         const response = await fetch(endpoint, {
@@ -111,56 +119,50 @@ async function fetchTextCompletion(
 // --- IMAGE API CALLS ---
 async function fetchImageGeneration(prompt: string): Promise<string> {
     if (!IMAGE_KEY) throw new Error("Image API Key is missing");
+    if (!IMAGE_FULL_ENDPOINT) throw new Error("Image API Base URL is missing. Please set IMAGE_API_BASE_URL to the FULL endpoint URL.");
 
-    const isSeaDream = IMAGE_MODEL.toLowerCase().includes('seedream') || IMAGE_MODEL.toLowerCase().includes('minimax');
+    // --- ENDPOINT ---
+    // User controls this 100%. No auto-append.
+    const endpoint = IMAGE_FULL_ENDPOINT;
     
-    // --- ENDPOINT CONSTRUCTION ---
-    // We trust the environment variable. If the user put a full path, we use it.
-    // Otherwise, we append standard OpenAI suffix "/images/generations".
-    let endpoint = IMAGE_BASE_URL;
-    
-    // Simple heuristic: If it doesn't end in typical generation paths, append default OpenAI path
-    if (!endpoint.endsWith('generations') && !endpoint.endsWith('text_to_image')) {
-         const base = endpoint.endsWith('/v1') ? endpoint : `${endpoint}/v1`;
-         endpoint = `${base}/images/generations`;
-    }
-    
-    // Clean double slashes (but keep http://)
-    endpoint = endpoint.replace(/([^:]\/)\/+/g, "$1");
-
-    // Safe 32-bit Integer for Seed
     const randomSeed = Math.floor(Math.random() * 2147483647);
+    const isSeaDream = IMAGE_MODEL.toLowerCase().includes('seedream') || IMAGE_MODEL.toLowerCase().includes('minimax');
 
-    // --- PAYLOAD CONSTRUCTION ---
-    let requestBody: any = {};
+    // --- PAYLOAD ---
+    // We try to support BOTH Standard OpenAI fields (flat) AND GMI Native fields (nested)
+    // because GMI gateways often support parameter pass-through if at the root level.
+    const requestBody: any = {
+        model: IMAGE_MODEL,
+        prompt: prompt,
+        n: 1,
+        size: "1024x1024",
+        response_format: "url",
+        // Flattened params (Standard OpenAI-compatible Gateway style)
+        seed: randomSeed,
+        guidance_scale: 7.5, 
+    };
 
     if (isSeaDream) {
-        // NATIVE STRUCTURE: { model, payload: { ... } }
-        // We use this structure because SeaDream/MiniMax requires nested params for seed/guidance
-        // We assume the gateway at 'endpoint' can handle this JSON structure.
-        requestBody = {
-            model: IMAGE_MODEL,
-            payload: {
-                prompt: prompt,
-                size: "1024x1024",
-                response_format: "url",
-                seed: randomSeed,
-                guidance_scale: 7.5, // Increased from 5.0 to force adherence (no faces)
-            }
-        };
-    } else {
-        // OPENAI STANDARD STRUCTURE
-        requestBody = {
-            model: IMAGE_MODEL,
+        // Double-send parameters in nested payload just in case the gateway requires it
+        requestBody.payload = {
             prompt: prompt,
-            n: 1,
             size: "1024x1024",
-            response_format: "url",
+            seed: randomSeed,
+            guidance_scale: 7.5
         };
     }
 
-    console.log(`[Image API] Endpoint: ${endpoint}`);
-    console.log(`[Image API] Payload:`, JSON.stringify(requestBody, null, 2));
+    // --- DEBUGGING: GENERATE CURL ---
+    const curlCommand = `curl -X POST "${endpoint}" \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer ${IMAGE_KEY.substring(0, 5)}..." \\
+  -d '${JSON.stringify(requestBody)}'`;
+
+    console.log(`%c[Image API DEBUG]`, "color: #0ea5e9; font-weight: bold;");
+    console.log(`Endpoint: ${endpoint}`);
+    console.log(`Full Payload:`, requestBody);
+    console.log(`👇 COPY THIS COMMAND TO TERMINAL TO TEST 👇`);
+    console.log(curlCommand);
 
     try {
         const response = await fetch(endpoint, {
@@ -174,12 +176,13 @@ async function fetchImageGeneration(prompt: string): Promise<string> {
 
         if (!response.ok) {
              const errText = await response.text();
-             console.error(`[Image API CRITICAL ERROR] Status: ${response.status}`);
-             console.error(`[Image API CRITICAL ERROR] Body: ${errText}`);
-             throw new Error(`Image API Failed (${response.status}): ${errText.substring(0, 100)}`);
+             console.error(`[Image API Error] Status: ${response.status}`);
+             console.error(`[Image API Error] Response: ${errText}`);
+             throw new Error(`API Error (${response.status}): ${errText}`);
         }
         
         const data = await response.json();
+        console.log(`[Image API] Success:`, data);
         
         // 1. Standard OpenAI Response
         if (data.data && data.data[0]) {
@@ -187,13 +190,12 @@ async function fetchImageGeneration(prompt: string): Promise<string> {
             if (data.data[0].image_url) return data.data[0].image_url;
         }
         
-        // 2. GMI Native / SeaDream Response (Outcome format)
+        // 2. GMI Native / SeaDream Response
         if (data.outcome && data.outcome.media_urls && data.outcome.media_urls.length > 0) {
             return data.outcome.media_urls[0].url;
         }
 
-        console.error("[Image API] Response format unrecognized:", data);
-        throw new Error("No image URL found in response");
+        throw new Error("No image URL found in response.");
 
     } catch (e) {
         console.error("fetchImageGeneration Exception:", e);
@@ -218,8 +220,8 @@ export const queryDictionary = async (userInput: string) => {
 
 export const generateCardImage = async (word: string, context?: string): Promise<string> => {
   try {
-    // 复习卡片：强调扁平插画，避免糊图
-    const prompt = `扁平化矢量插画，极简风格，${word} (${context})。纯色背景，线条清晰，高饱和度，教育插图，无文字，无模糊。`;
+    // Explicit Chinese prompt for GMI models
+    const prompt = `扁平化矢量插画，极简风格，${word} (语境: ${context})。白色背景，高清晰度，教育用途，无文字。`;
     return await fetchImageGeneration(prompt);
   } catch (e) {
     console.error("Card Image Error:", e);
@@ -231,17 +233,16 @@ export const generatePetSprite = async (stage: number): Promise<string> => {
     let prompt = '';
 
     if (stage === 0) {
-        // Stage 0: EGG -> FORCE GEOMETRIC OBJECT
-        // Using "Crystal Ball" and "Gemstone" to avoid biological "Egg"
-        prompt = `一个精致的黄色水晶球 (Yellow Crystal Sphere)，放置在纯白背景上。高品质产品摄影，微距镜头，玻璃材质，反光清晰。它是一个静物，没有生命，没有脸，没有五官，绝对不是角色。`;
+        // Stage 0: EGG -> Force "Gemstone" to avoid faces
+        prompt = `一个金黄色的圆形宝石，静物摄影，特写镜头，放置在白色背景上。材质是半透明的水晶，表面光滑。仅仅是一个球体，没有脸，没有五官，没有手脚，不是角色，不是生物。`;
     } else {
         // Stage 1+: PLUSHIE
         let description = "";
-        if (stage === 1) description = "黄色小鸡毛绒公仔 (Yellow Chick Plushie)";
-        if (stage === 2) description = "橙色小狐狸毛绒玩具 (Fox Plushie)";
-        if (stage === 3) description = "神秘生物精致手办 (Fantasy Figurine)";
+        if (stage === 1) description = "可爱的小鸡毛绒公仔 (cute yellow chick plushie)";
+        if (stage === 2) description = "橙色的小狐狸毛绒玩具 (orange fox plushie)";
+        if (stage === 3) description = "幻想生物手办 (fantasy creature figurine)";
 
-        prompt = `3D渲染盲盒风格，${description}，纯白背景，柔和影棚光，毛绒质感，可爱，无水印，无文字。`;
+        prompt = `3D渲染，毛绒玩具质感，${description}。柔和的影棚光，白色背景，无文字。Q版风格，可爱。`;
     }
 
     try {
@@ -271,7 +272,7 @@ export const generatePetReaction = async (
 
 export const generatePostcard = async (petName: string): Promise<string> => {
     try {
-        const prompt = `宫崎骏风格手绘风景画，旅行明信片，蓝天白云草地，清新自然，治愈系，高分辨率，无文字。`;
+        const prompt = `宫崎骏风格风景画，美丽的旅行风景，蓝天白云，治愈系插画。无文字。`;
         return await fetchImageGeneration(prompt);
     } catch(e) {
         return getPlaceholder("Travel", "#60A5FA");
