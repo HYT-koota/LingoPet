@@ -1,4 +1,7 @@
 
+
+import { CURRENT_CONFIG as CONFIG_DEBUG } from './geminiService';
+
 // --- Generic API Service (Split Text & Image) ---
 
 // Helper to clean config values (remove spaces, trailing slashes)
@@ -9,11 +12,8 @@ const cleanVal = (val?: string) => val ? val.trim() : '';
 const TEXT_KEY = cleanVal(process.env.TEXT_API_KEY);
 let TEXT_BASE_URL = cleanUrl(process.env.TEXT_API_BASE_URL) || 'https://api.openai.com/v1';
 
-// AUTO-FIX: User commonly mistakes Console URL for API URL
-if (TEXT_BASE_URL.includes('console.gmicloud.ai')) {
-    console.warn("⚠️ Detected Console URL in TEXT_API_BASE_URL. Auto-correcting to API URL.");
-    TEXT_BASE_URL = 'https://api.gmicloud.ai/v1';
-}
+// [REMOVED] Auto-correction logic. 
+// The code now strictly uses whatever URL the user provided in Vercel.
 
 const TEXT_MODEL = cleanVal(process.env.TEXT_API_MODEL) || 'gpt-3.5-turbo';
 
@@ -89,14 +89,18 @@ async function fetchTextCompletion(
 
     // Determine Endpoint
     let endpoint = TEXT_BASE_URL;
-    if (endpoint.endsWith('/')) endpoint = endpoint.slice(0, -1);
     
-    // Auto-append chat/completions if missing and it looks like a base URL
+    // Only perform standard cleanups if it doesn't look like a full endpoint
+    // If user provided a specific full URL (containing 'chat/completions'), we trust it completely.
     if (!endpoint.includes('/chat/completions')) {
+        if (endpoint.endsWith('/')) endpoint = endpoint.slice(0, -1);
         if (!endpoint.endsWith('/v1')) endpoint = `${endpoint}/v1`;
         endpoint = `${endpoint}/chat/completions`;
+        // Clean up double slashes
+        endpoint = endpoint.replace(/([^:]\/)\/+/g, "$1");
     }
-    endpoint = endpoint.replace(/([^:]\/)\/+/g, "$1");
+
+    console.log(`[Text API] Endpoint: ${endpoint}`);
 
     // PROXY STRATEGY: Try direct first. If CORS fails, try local proxy.
     try {
@@ -133,7 +137,7 @@ async function fetchTextCompletion(
             return data.choices?.[0]?.message?.content || "";
         } catch (proxyError: any) {
              console.error("Both Direct and Proxy Text API failed.", proxyError);
-             throw new Error(`Connection Failed. Please check TEXT_API_BASE_URL. (Tried: ${endpoint})`);
+             throw new Error(`Connection Failed. Please check TEXT_API_BASE_URL.\n(Tried: ${endpoint})\nError: ${e.message}`);
         }
     }
 }
