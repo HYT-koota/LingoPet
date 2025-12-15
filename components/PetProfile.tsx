@@ -1,22 +1,17 @@
 
-import React, { useState, useEffect } from 'react';
-import { PetState, PetStage, WordEntry } from '../types';
-import { Trophy, BookOpen, MapPin, Star, Activity, List, Calendar, ChevronDown, ChevronUp } from 'lucide-react';
+import React from 'react';
+import { PetState, PetStage } from '../types';
+import { Trophy, BookOpen, MapPin, Star, Activity, ChevronRight } from 'lucide-react';
 import { CURRENT_CONFIG } from '../services/geminiService';
 import { getWords } from '../services/storageService';
 
 interface PetProfileProps {
   pet: PetState;
+  onOpenNotebook: () => void;
 }
 
-const PetProfile: React.FC<PetProfileProps> = ({ pet }) => {
-  const [words, setWords] = useState<WordEntry[]>([]);
-  const [showWords, setShowWords] = useState(false);
-
-  useEffect(() => {
-    const allWords = getWords().sort((a, b) => b.addedAt - a.addedAt);
-    setWords(allWords);
-  }, []);
+const PetProfile: React.FC<PetProfileProps> = ({ pet, onOpenNotebook }) => {
+  const wordCount = getWords().length;
 
   const stages = [
     { id: PetStage.EGG, label: 'Egg', desc: 'Waiting to hatch' },
@@ -54,48 +49,24 @@ const PetProfile: React.FC<PetProfileProps> = ({ pet }) => {
            </div>
        </div>
 
-       {/* Word List Section */}
-       <div className="bg-white rounded-3xl shadow-sm border border-brand-100 mb-6 overflow-hidden">
-           <button 
-             onClick={() => setShowWords(!showWords)}
-             className="w-full p-6 flex justify-between items-center text-left hover:bg-gray-50 transition-colors"
-           >
-                <div className="flex items-center gap-3">
-                    <div className="bg-brand-100 text-brand-600 p-2 rounded-xl">
-                        <List size={20} />
-                    </div>
-                    <div>
-                        <h3 className="font-bold text-gray-800">My Notebook</h3>
-                        <p className="text-xs text-gray-500">{words.length} words collected</p>
-                    </div>
+       {/* Notebook Entry Card */}
+       <button 
+         onClick={onOpenNotebook}
+         className="w-full bg-white p-6 rounded-3xl shadow-sm border border-brand-100 mb-6 flex justify-between items-center group hover:bg-brand-50 transition-colors"
+       >
+            <div className="flex items-center gap-4">
+                <div className="bg-brand-100 text-brand-600 w-12 h-12 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <BookOpen size={24} />
                 </div>
-                {showWords ? <ChevronUp className="text-gray-400"/> : <ChevronDown className="text-gray-400"/>}
-           </button>
-           
-           {showWords && (
-               <div className="px-6 pb-6 max-h-96 overflow-y-auto">
-                   {words.length === 0 ? (
-                       <p className="text-center text-gray-400 italic py-4">No words yet. Go search in the dictionary!</p>
-                   ) : (
-                       <div className="space-y-3">
-                           {words.map((word) => (
-                               <div key={word.id} className="flex flex-col border-b border-gray-100 pb-2 last:border-0">
-                                   <div className="flex justify-between items-baseline">
-                                       <span className="font-bold text-gray-800 text-lg">{word.word}</span>
-                                       <span className="text-[10px] text-gray-400 flex items-center gap-1">
-                                           <Calendar size={10} />
-                                           {new Date(word.addedAt).toLocaleDateString()}
-                                       </span>
-                                   </div>
-                                   <span className="text-sm text-gray-600 leading-snug">{word.definition}</span>
-                                   <span className="text-xs text-brand-500 italic mt-1">"{word.context}"</span>
-                               </div>
-                           ))}
-                       </div>
-                   )}
-               </div>
-           )}
-       </div>
+                <div className="text-left">
+                    <h3 className="text-lg font-bold text-gray-800 group-hover:text-brand-700 transition-colors">My Notebook</h3>
+                    <p className="text-sm text-gray-500">{wordCount} words collected</p>
+                </div>
+            </div>
+            <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 group-hover:bg-brand-200 group-hover:text-brand-700 transition-colors">
+                <ChevronRight size={20} />
+            </div>
+       </button>
 
        {/* Timeline */}
        <div className="bg-white p-6 rounded-3xl shadow-sm border border-brand-100 mb-6">

@@ -3,7 +3,8 @@ export enum AppMode {
   HOME = 'HOME',
   DICTIONARY = 'DICTIONARY',
   REVIEW = 'REVIEW',
-  PET_PROFILE = 'PET_PROFILE'
+  PET_PROFILE = 'PET_PROFILE',
+  NOTEBOOK = 'NOTEBOOK'
 }
 
 export enum PetStage {
@@ -19,9 +20,10 @@ export type ReviewMode = 'passive' | 'active';
 export interface WordEntry {
   id: string;
   word: string;
-  definition: string; // Basic meaning
+  definition: string; // Basic meaning (English)
+  translation?: string; // Chinese meaning (New field)
   context: string; // Example sentence
-  visualDescription?: string; // NEW: A concrete scene description for the image generator
+  visualDescription?: string; // Scene description for image gen
   addedAt: number; // Timestamp
   lastReviewedAt: number | null;
   reviewLevel: number; // 0-5 for Spaced Repetition

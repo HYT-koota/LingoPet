@@ -5,6 +5,7 @@ import Dictionary from './components/Dictionary';
 import ReviewSession from './components/ReviewSession';
 import PetNode from './components/PetNode';
 import PetProfile from './components/PetProfile';
+import Notebook from './components/Notebook';
 import { 
   getWords, 
   getPetState, 
@@ -172,31 +173,33 @@ const App: React.FC = () => {
   return (
     <div className="h-full w-full flex flex-col bg-brand-50 text-gray-800 font-sans">
         
-        {/* Top Bar */}
-        <header className="pt-4 pb-2 px-6 flex justify-between items-center z-20 relative">
-             <div className="flex items-center gap-2">
-                {pet.stage === PetStage.ADULT ? (
-                    <button onClick={handleFarewell} className="bg-brand-600 text-white text-xs px-3 py-1 rounded-full shadow-lg animate-pulse font-bold flex items-center gap-1">
-                        <Egg size={12} /> New Generation
-                    </button>
-                ) : (
-                    <div className="w-10 h-10 bg-white rounded-full shadow-sm flex items-center justify-center text-xl border border-brand-100">
-                       {pet.cycle > 1 ? '🦉' : '🐣'}
-                    </div>
-                )}
-                
-                {pet.stage !== PetStage.ADULT && (
-                    <div>
-                        <h1 className="font-extrabold text-brand-800 leading-tight">LingoPet</h1>
-                        <p className="text-[10px] font-bold text-brand-400 uppercase tracking-wide">Cycle {pet.cycle} • v3.2</p>
-                    </div>
-                )}
-             </div>
-             <div className="flex items-center bg-white rounded-full shadow-sm border border-brand-100 px-3 py-1 gap-2">
-                 <Trophy size={14} className="text-brand-500 fill-current" />
-                 <span className="text-sm font-bold text-gray-700">{pet.xp} XP</span>
-             </div>
-        </header>
+        {/* Top Bar (Hidden in Notebook mode for cleaner look) */}
+        {mode !== AppMode.NOTEBOOK && (
+            <header className="pt-4 pb-2 px-6 flex justify-between items-center z-20 relative">
+                <div className="flex items-center gap-2">
+                    {pet.stage === PetStage.ADULT ? (
+                        <button onClick={handleFarewell} className="bg-brand-600 text-white text-xs px-3 py-1 rounded-full shadow-lg animate-pulse font-bold flex items-center gap-1">
+                            <Egg size={12} /> New Generation
+                        </button>
+                    ) : (
+                        <div className="w-10 h-10 bg-white rounded-full shadow-sm flex items-center justify-center text-xl border border-brand-100">
+                        {pet.cycle > 1 ? '🦉' : '🐣'}
+                        </div>
+                    )}
+                    
+                    {pet.stage !== PetStage.ADULT && (
+                        <div>
+                            <h1 className="font-extrabold text-brand-800 leading-tight">LingoPet</h1>
+                            <p className="text-[10px] font-bold text-brand-400 uppercase tracking-wide">Cycle {pet.cycle} • v3.2</p>
+                        </div>
+                    )}
+                </div>
+                <div className="flex items-center bg-white rounded-full shadow-sm border border-brand-100 px-3 py-1 gap-2">
+                    <Trophy size={14} className="text-brand-500 fill-current" />
+                    <span className="text-sm font-bold text-gray-700">{pet.xp} XP</span>
+                </div>
+            </header>
+        )}
 
         {/* Main Viewport */}
         <main className="flex-1 overflow-hidden relative flex flex-col">
@@ -262,8 +265,14 @@ const App: React.FC = () => {
 
             {mode === AppMode.PET_PROFILE && (
                 <div className="h-full flex flex-col animate-pop">
-                    <PetProfile pet={pet} />
+                    <PetProfile pet={pet} onOpenNotebook={() => setMode(AppMode.NOTEBOOK)} />
                 </div>
+            )}
+
+            {mode === AppMode.NOTEBOOK && (
+                 <div className="h-full flex flex-col animate-pop">
+                    <Notebook onBack={() => setMode(AppMode.PET_PROFILE)} />
+                 </div>
             )}
 
             {mode === AppMode.DICTIONARY && (
@@ -279,32 +288,34 @@ const App: React.FC = () => {
             )}
         </main>
 
-        {/* Bottom Navigation Dock */}
-        <nav className="bg-white border-t border-gray-100 px-6 py-3 flex justify-around items-center pb-safe shadow-[0_-4px_20px_rgba(0,0,0,0.03)] z-30">
-            <button 
-                onClick={() => setMode(AppMode.HOME)}
-                className={`flex flex-col items-center gap-1 p-2 rounded-2xl transition-all ${mode === AppMode.HOME ? 'text-brand-600 bg-brand-50' : 'text-gray-400 hover:text-brand-400'}`}
-            >
-                <Home size={24} strokeWidth={mode === AppMode.HOME ? 2.5 : 2} />
-                <span className="text-[10px] font-bold">Home</span>
-            </button>
+        {/* Bottom Navigation Dock (Hidden in Notebook/Review for immersion) */}
+        {mode !== AppMode.NOTEBOOK && mode !== AppMode.REVIEW && (
+            <nav className="bg-white border-t border-gray-100 px-6 py-3 flex justify-around items-center pb-safe shadow-[0_-4px_20px_rgba(0,0,0,0.03)] z-30">
+                <button 
+                    onClick={() => setMode(AppMode.HOME)}
+                    className={`flex flex-col items-center gap-1 p-2 rounded-2xl transition-all ${mode === AppMode.HOME ? 'text-brand-600 bg-brand-50' : 'text-gray-400 hover:text-brand-400'}`}
+                >
+                    <Home size={24} strokeWidth={mode === AppMode.HOME ? 2.5 : 2} />
+                    <span className="text-[10px] font-bold">Home</span>
+                </button>
 
-            {/* Floating Main Action Button */}
-            <button 
-                onClick={() => setMode(AppMode.DICTIONARY)}
-                className="relative -top-6 bg-brand-500 text-white p-4 rounded-full shadow-lg hover:bg-brand-600 hover:scale-105 transition-all border-4 border-brand-50"
-            >
-                <Search size={28} strokeWidth={2.5} />
-            </button>
+                {/* Floating Main Action Button */}
+                <button 
+                    onClick={() => setMode(AppMode.DICTIONARY)}
+                    className="relative -top-6 bg-brand-500 text-white p-4 rounded-full shadow-lg hover:bg-brand-600 hover:scale-105 transition-all border-4 border-brand-50"
+                >
+                    <Search size={28} strokeWidth={2.5} />
+                </button>
 
-            <button 
-                onClick={() => setMode(AppMode.PET_PROFILE)}
-                className={`flex flex-col items-center gap-1 p-2 rounded-2xl transition-all ${mode === AppMode.PET_PROFILE ? 'text-brand-600 bg-brand-50' : 'text-gray-400 hover:text-brand-400'}`}
-            >
-                <User size={24} strokeWidth={mode === AppMode.PET_PROFILE ? 2.5 : 2} />
-                <span className="text-[10px] font-bold">Profile</span>
-            </button>
-        </nav>
+                <button 
+                    onClick={() => setMode(AppMode.PET_PROFILE)}
+                    className={`flex flex-col items-center gap-1 p-2 rounded-2xl transition-all ${mode === AppMode.PET_PROFILE ? 'text-brand-600 bg-brand-50' : 'text-gray-400 hover:text-brand-400'}`}
+                >
+                    <User size={24} strokeWidth={mode === AppMode.PET_PROFILE ? 2.5 : 2} />
+                    <span className="text-[10px] font-bold">Profile</span>
+                </button>
+            </nav>
+        )}
 
         {/* Postcard Modal */}
         {showPostcard && (

@@ -52,8 +52,9 @@ const Dictionary: React.FC<DictionaryProps> = ({ onWordAdded }) => {
           id: crypto.randomUUID(),
           word: data.identifiedWord,
           definition: data.definition,
+          translation: data.translation, // Save the Chinese translation
           context: data.example,
-          visualDescription: data.visualDescription, // Save the visual prompt
+          visualDescription: data.visualDescription, 
           addedAt: Date.now(),
           lastReviewedAt: null,
           reviewLevel: 0,
