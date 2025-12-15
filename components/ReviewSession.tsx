@@ -1,8 +1,9 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { WordEntry, ReviewMode } from '../types';
 import { generateCardImage } from '../services/geminiService';
 import { updateWord, calculateNextReview } from '../services/storageService';
-import { Play, Pause, Check, X, RotateCw } from 'lucide-react';
+import { Play, Pause, Check, X, RotateCw, Shuffle } from 'lucide-react';
 
 interface ReviewSessionProps {
   words: WordEntry[];
@@ -11,16 +12,23 @@ interface ReviewSessionProps {
 }
 
 const ReviewSession: React.FC<ReviewSessionProps> = ({ words, mode, onComplete }) => {
+  // Use local state for words to support shuffling
+  const [sessionWords, setSessionWords] = useState<WordEntry[]>(words);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showImage, setShowImage] = useState(false);
   const [currentImage, setCurrentImage] = useState<string | null>(null);
   const [loadingImage, setLoadingImage] = useState(false);
 
-  const currentWord = words[currentIndex];
+  const currentWord = sessionWords[currentIndex];
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isPlayingRef = useRef(false); 
   const mountedRef = useRef(true);
+
+  useEffect(() => {
+      // If original props change (unlikely during session, but good practice), sync
+      setSessionWords(words);
+  }, [words]);
 
   useEffect(() => {
       return () => { mountedRef.current = false; };
@@ -52,6 +60,26 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ words, mode, onComplete }
       timeoutRef.current = setTimeout(resolve, ms);
   });
 
+  const shuffleQueue = () => {
+    // Only shuffle from the current index + 1 onwards
+    // or if at start, shuffle everything
+    if (currentIndex >= sessionWords.length - 1) return; // Nothing to shuffle
+
+    const done = sessionWords.slice(0, currentIndex + 1);
+    const upcoming = sessionWords.slice(currentIndex + 1);
+    
+    // Fisher-Yates shuffle for upcoming
+    for (let i = upcoming.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [upcoming[i], upcoming[j]] = [upcoming[j], upcoming[i]];
+    }
+    
+    setSessionWords([...done, ...upcoming]);
+    
+    // Feedback effect could go here
+    setIsPlaying(false); // Pause if shuffling
+  };
+
   // --- Main Sequence Logic ---
   const runPassiveSequence = async (word: WordEntry) => {
     if (!isPlayingRef.current) return;
@@ -65,12 +93,12 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ words, mode, onComplete }
     let imgUrl = word.todayImage;
     const today = new Date().toISOString().split('T')[0];
     if (!imgUrl || word.todayImageDate !== today) {
-        generateCardImage(word.word, word.context).then(url => {
+        // Use visualDescription if available for better relevance
+        generateCardImage(word.word, word.context, word.visualDescription).then(url => {
             updateWord(word.id, { todayImage: url, todayImageDate: today });
         });
-        // If we are generating now, it might be slow. For passive flow, we might want to proceed or wait.
         // Strategy: Wait for image before 2nd read.
-        imgUrl = await generateCardImage(word.word, word.context);
+        imgUrl = await generateCardImage(word.word, word.context, word.visualDescription);
     }
 
     // 2. Speak First time (Image Hidden, Word Visible)
@@ -110,7 +138,7 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ words, mode, onComplete }
             setShowImage(false); 
             let imgUrl = currentWord.todayImage;
             if (!imgUrl) {
-                imgUrl = await generateCardImage(currentWord.word, currentWord.context);
+                imgUrl = await generateCardImage(currentWord.word, currentWord.context, currentWord.visualDescription);
                 updateWord(currentWord.id, { todayImage: imgUrl, todayImageDate: new Date().toISOString().split('T')[0] });
             }
             if (mountedRef.current) {
@@ -140,7 +168,7 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ words, mode, onComplete }
 
 
   const handleNext = () => {
-    if (currentIndex < words.length - 1) {
+    if (currentIndex < sessionWords.length - 1) {
       setCurrentIndex(prev => prev + 1);
     } else {
       finishSession();
@@ -171,14 +199,30 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ words, mode, onComplete }
   return (
     <div className="flex flex-col h-full p-6 relative">
       {/* Progress */}
-      <div className="flex justify-between items-center mb-4 text-xs font-bold text-brand-400 uppercase tracking-wider">
-          <span>{mode === 'passive' ? 'Daily Listen' : 'Active Recall'} • {currentIndex + 1}/{words.length}</span>
-          <span onClick={() => onComplete(0)} className="cursor-pointer hover:text-red-400">Exit</span>
+      <div className="flex justify-between items-center mb-4">
+          <span className="text-xs font-bold text-brand-400 uppercase tracking-wider">
+              {mode === 'passive' ? 'Daily Listen' : 'Active Recall'} • {currentIndex + 1}/{sessionWords.length}
+          </span>
+          
+          <div className="flex gap-4">
+             {/* Shuffle Button */}
+             {currentIndex < sessionWords.length - 1 && (
+                <button 
+                    onClick={shuffleQueue}
+                    className="text-gray-400 hover:text-brand-500 transition-colors"
+                    title="Shuffle Remaining"
+                >
+                    <Shuffle size={16} />
+                </button>
+             )}
+             <span onClick={() => onComplete(0)} className="text-xs font-bold text-brand-400 uppercase tracking-wider cursor-pointer hover:text-red-400">Exit</span>
+          </div>
       </div>
+      
       <div className="w-full bg-gray-100 h-3 rounded-full mb-6 overflow-hidden">
         <div 
             className="bg-brand-400 h-full rounded-full transition-all duration-500 ease-out" 
-            style={{ width: `${((currentIndex) / words.length) * 100}%` }}
+            style={{ width: `${((currentIndex) / sessionWords.length) * 100}%` }}
         />
       </div>
 

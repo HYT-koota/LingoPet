@@ -1,5 +1,6 @@
 
 
+
 import { CURRENT_CONFIG as CONFIG_DEBUG } from './geminiService';
 
 // --- Generic API Service (Split Text & Image) ---
@@ -65,7 +66,7 @@ function getPlaceholder(text: string, color: string = "#E5E7EB") {
 async function fetchTextCompletion(
     systemPrompt: string, 
     userPrompt: string, 
-    jsonMode: boolean = false
+    userJsonMode: boolean = false
 ): Promise<string> {
     if (!TEXT_KEY) throw new Error("Text API Key is missing");
 
@@ -83,7 +84,7 @@ async function fetchTextCompletion(
         temperature: 0.7,
     };
 
-    if (jsonMode && (TEXT_MODEL.toLowerCase().includes('gpt') || TEXT_MODEL.toLowerCase().includes('deepseek'))) {
+    if (userJsonMode && (TEXT_MODEL.toLowerCase().includes('gpt') || TEXT_MODEL.toLowerCase().includes('deepseek'))) {
         body.response_format = { type: "json_object" };
     }
 
@@ -225,8 +226,15 @@ async function fetchImageGenerationViaProxy(prompt: string, body: any): Promise<
 
 // --- Dictionary & Note Taking ---
 export const queryDictionary = async (userInput: string) => {
+  // Enhanced prompt to ask for a "visualDescription" which is a concrete scene for image gen.
   const systemPrompt = `You are a helpful dictionary assistant. Output JSON.
-  { "identifiedWord": "string", "definition": "string", "example": "string", "translation": "Chinese string" }`;
+  { 
+    "identifiedWord": "string (the exact word)", 
+    "definition": "string (short definition)", 
+    "example": "string (short example sentence)", 
+    "translation": "Chinese string (word meaning)",
+    "visualDescription": "string (A concrete, simple visual description of a scene representing this word in its context. Do not use abstract concepts. E.g. for 'Attention', say 'A student raising hand in class'. For 'Bank', say 'A river bank with grass'. In English.)"
+  }`;
   
   try {
       const result = await fetchTextCompletion(systemPrompt, `Define: "${userInput}"`, true);
@@ -238,10 +246,15 @@ export const queryDictionary = async (userInput: string) => {
 
 // --- Image Generation Public Methods ---
 
-export const generateCardImage = async (word: string, context?: string): Promise<string> => {
+export const generateCardImage = async (word: string, context?: string, visualDescription?: string): Promise<string> => {
   try {
+    // Priority: Use the concrete visual description if available (Visual Translation)
+    // If not, fall back to word + context.
+    const subject = visualDescription ? visualDescription : `${word} (context: ${context})`;
+    
     // Flashcard style: Cute, clean, educational
-    const prompt = `(SiliconFlow Kolors) 极简风格插画，卡通风格，${word} (语境: ${context})。色彩明快，矢量图风格，白色背景，无文字，教育卡片。`;
+    const prompt = `(SiliconFlow Kolors) Minimalist illustration, flat vector style, white background, no text, cute style. SUBJECT: ${subject}. Bright colors.`;
+    
     return await fetchImageGeneration(prompt);
   } catch (e) {
     console.error("Card Image Error:", e);
@@ -251,19 +264,21 @@ export const generateCardImage = async (word: string, context?: string): Promise
 
 export const generatePetSprite = async (stage: number): Promise<string> => {
     let prompt = '';
+    // Key change: Emphasize "Pure White Background" for mix-blend-mode hack
+    const styleSuffix = ", pure white background (hex code #FFFFFF), no shadow, flat studio lighting, isolated on white, 3d render, cute";
 
     if (stage === 0) {
         // Stage 0: EGG - Cute Cartoon Style
-        prompt = `(SiliconFlow Kolors) 一颗可爱的神奇宠物蛋，卡通风格，蛋壳上有发光的金色星星花纹。柔和的暖光，吉卜力动画风格，治愈系插画，3D渲染，圆润可爱，白色背景，无文字。`;
+        prompt = `(SiliconFlow Kolors) A cute magical pet egg, eggshell has glowing golden star patterns, Ghibli style, healing illustration${styleSuffix}`;
     } else {
         // Stage 1+: Cute Character
         let description = "";
-        if (stage === 1) description = "一只超级可爱的Q版小鸡，圆滚滚的身体 (cute round chick)";
-        if (stage === 2) description = "一只淘气的Q版橙色小狐狸，大大的眼睛 (cute orange fox chibi)";
-        if (stage === 3) description = "一只华丽的梦幻生物，发光的翅膀 (fantasy creature with glowing wings)";
+        if (stage === 1) description = "cute round yellow chick, chibi style";
+        if (stage === 2) description = "mischievous cute orange fox chibi, big eyes";
+        if (stage === 3) description = "majestic fantasy creature, glowing wings, elegant";
 
         // Style: Pop Mart / Disney / Pixar style
-        prompt = `(SiliconFlow Kolors) 3D盲盒潮玩风格，${description}。皮克斯动画风格，精致的色彩，柔和的影棚光，白色背景，无文字，正面特写，超级可爱。`;
+        prompt = `(SiliconFlow Kolors) 3D blind box toy style, ${description}, Pixar style, exquisite detail, front view${styleSuffix}`;
     }
 
     try {
@@ -293,7 +308,7 @@ export const generatePetReaction = async (
 
 export const generatePostcard = async (petName: string): Promise<string> => {
     try {
-        const prompt = `(SiliconFlow Kolors) 新海诚风格风景画，美丽的旅行风景，蓝天白云，动漫风格，色彩鲜艳，治愈系。无文字。`;
+        const prompt = `(SiliconFlow Kolors) Shinkai Makoto style landscape, beautiful travel scenery, blue sky and white clouds, anime style, vivid colors, healing, no text.`;
         return await fetchImageGeneration(prompt);
     } catch(e) {
         return getPlaceholder("Travel", "#60A5FA");

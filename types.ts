@@ -1,3 +1,4 @@
+
 export enum AppMode {
   HOME = 'HOME',
   DICTIONARY = 'DICTIONARY',
@@ -20,6 +21,7 @@ export interface WordEntry {
   word: string;
   definition: string; // Basic meaning
   context: string; // Example sentence
+  visualDescription?: string; // NEW: A concrete scene description for the image generator
   addedAt: number; // Timestamp
   lastReviewedAt: number | null;
   reviewLevel: number; // 0-5 for Spaced Repetition

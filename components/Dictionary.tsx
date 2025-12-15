@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Mic, Search, Loader2, CheckCircle, Sparkles } from 'lucide-react';
 import { queryDictionary, generateCardImage } from '../services/geminiService';
@@ -52,6 +53,7 @@ const Dictionary: React.FC<DictionaryProps> = ({ onWordAdded }) => {
           word: data.identifiedWord,
           definition: data.definition,
           context: data.example,
+          visualDescription: data.visualDescription, // Save the visual prompt
           addedAt: Date.now(),
           lastReviewedAt: null,
           reviewLevel: 0,
@@ -59,8 +61,8 @@ const Dictionary: React.FC<DictionaryProps> = ({ onWordAdded }) => {
         };
         saveWord(newWord);
         
-        // Background process: Generate image immediately so it's ready for review
-        generateCardImage(newWord.word, newWord.context).then(imgUrl => {
+        // Background process: Generate image immediately using the specific visual description
+        generateCardImage(newWord.word, newWord.context, newWord.visualDescription).then(imgUrl => {
             updateWord(newWord.id, { 
                 todayImage: imgUrl, 
                 todayImageDate: new Date().toISOString().split('T')[0] 

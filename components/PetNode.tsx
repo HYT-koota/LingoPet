@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { PetState } from '../types';
 import { Heart, Zap, Star, Loader2 } from 'lucide-react';
@@ -22,8 +23,8 @@ const PetNode: React.FC<PetNodeProps> = ({ pet, onClick }) => {
     <div className="w-full flex items-center justify-between p-4 relative" onClick={handlePet}>
       
       {/* Left: Speech Bubble Area */}
-      <div className="flex-1 pr-4 z-10 relative">
-         <div className="bg-white/90 backdrop-blur-sm border border-brand-100 rounded-tl-2xl rounded-tr-2xl rounded-br-2xl rounded-bl-none p-4 shadow-lg relative animate-pop transform origin-bottom-left">
+      <div className="flex-1 pr-4 z-10 relative flex flex-col items-start">
+         <div className="bg-white/90 backdrop-blur-sm border border-brand-100 rounded-tl-2xl rounded-tr-2xl rounded-br-2xl rounded-bl-none p-4 shadow-lg relative animate-pop transform origin-bottom-left md:max-w-[50%]">
             <p className="text-sm text-gray-700 font-bold leading-snug">
                 "{pet.dailyQuote || '...'}"
             </p>
@@ -47,12 +48,13 @@ const PetNode: React.FC<PetNodeProps> = ({ pet, onClick }) => {
             </div>
         )}
         
-        <div className="w-full h-full flex items-center justify-center drop-shadow-2xl">
+        <div className="w-full h-full flex items-center justify-center">
             {imageUrl ? (
+                // Use mix-blend-multiply to remove white background from the generated image
                 <img 
                     src={imageUrl} 
                     alt={pet.name} 
-                    className="w-full h-full object-contain animate-float"
+                    className="w-full h-full object-contain animate-float mix-blend-multiply drop-shadow-lg"
                 />
             ) : (
                 <div className="w-24 h-24 bg-brand-100 rounded-full flex items-center justify-center animate-pulse shadow-inner">
@@ -61,8 +63,8 @@ const PetNode: React.FC<PetNodeProps> = ({ pet, onClick }) => {
             )}
         </div>
         
-        {/* Shadow */}
-        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-24 h-4 bg-black/10 rounded-[100%] blur-md"></div>
+        {/* Shadow Grounding */}
+        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-20 h-3 bg-black/10 rounded-[100%] blur-sm"></div>
       </div>
 
     </div>

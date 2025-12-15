@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { AppMode, PetState, PetStage, DailyStats, WordEntry, ReviewMode } from './types';
 import Dictionary from './components/Dictionary';
@@ -72,7 +73,7 @@ const App: React.FC = () => {
     }
     
     if (selection.length === 0 && type === 'due') {
-        alert("No words available for Brain Gym. Add more words first!");
+        alert("No words available for Brain Gym. Search words in Dictionary first!");
         return;
     }
 
@@ -236,7 +237,7 @@ const App: React.FC = () => {
                                 <Trophy size={20} />
                             </div>
                             <h3 className="font-bold text-gray-800">Brain Gym</h3>
-                            <p className="text-xs text-gray-400 mt-1">Active recall test</p>
+                            <p className="text-xs text-gray-400 mt-1">Review words due from notebook</p>
                         </button>
                      </div>
 
