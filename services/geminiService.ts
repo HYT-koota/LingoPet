@@ -1,7 +1,6 @@
 
 /**
- * 核心配置：直接从 process.env 读取 Vite 注入的环境变量
- * 注意：此处不使用任何外部 SDK，防止其内部逻辑拦截请求或报错
+ * 核心配置
  */
 export const CURRENT_CONFIG = {
     textModel: 'gemini-1.5-flash', 
@@ -18,34 +17,49 @@ function getPlaceholder(text: string, color: string = "#E5E7EB") {
 
 /**
  * 统一 API 调用函数
- * @param type 'text' (GMI Serving) | 'image' (GMI Cloud)
+ * 使用 v1beta 路径，这是 Gemini 1.5 系列最稳定的端点
  */
 async function callGmiAPI(type: 'text' | 'image', model: string, payload: any) {
     const isImage = type === 'image';
     const apiKey = isImage ? process.env.IMAGE_API_KEY : process.env.TEXT_API_KEY;
-    
-    // 使用 vercel.json 配置的代理路径
     const proxyPath = isImage ? '/api/proxy/image' : '/api/proxy/text';
-    const url = `${proxyPath}/models/${model}:generateContent?key=${apiKey}`;
+    
+    // 关键修复：加入 v1beta 版本前缀。如果你的后端需要 v1，请将 v1beta 改为 v1
+    const url = `${proxyPath}/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
     if (!apiKey) {
-        throw new Error(`${type.toUpperCase()} API Key is missing in environment variables.`);
+        throw new Error(`${type.toUpperCase()} API Key 缺失，请检查环境变量。`);
     }
 
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-    });
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
 
-    const data = await response.json();
+        const contentType = response.headers.get("content-type");
+        
+        if (!response.ok) {
+            let errorMsg = `HTTP Error ${response.status}`;
+            if (contentType && contentType.includes("application/json")) {
+                const errData = await response.json();
+                errorMsg = errData.error?.message || errorMsg;
+            } else {
+                errorMsg = await response.text();
+            }
+            throw new Error(errorMsg);
+        }
 
-    if (!response.ok) {
-        console.error(`API Error (${type}):`, data);
-        throw new Error(data.error?.message || `API Request Failed (${response.status})`);
+        if (contentType && contentType.includes("application/json")) {
+            return await response.json();
+        } else {
+            throw new Error("API 返回了非 JSON 格式的内容");
+        }
+    } catch (e: any) {
+        console.error(`[${type}] API Call Failed:`, e.message);
+        throw e;
     }
-
-    return data;
 }
 
 /**
@@ -53,10 +67,10 @@ async function callGmiAPI(type: 'text' | 'image', model: string, payload: any) {
  */
 export const queryDictionary = async (userInput: string) => {
     const payload = {
-        contents: [{ parts: [{ text: `Define the word or phrase: "${userInput}"` }] }],
+        contents: [{ parts: [{ text: `Task: Dictionary definition for "${userInput}". Output JSON only.` }] }],
         generationConfig: { responseMimeType: "application/json" },
         systemInstruction: {
-            parts: [{ text: "You are a language learning dictionary. Return JSON: { \"identifiedWord\": \"...\", \"definition\": \"...\", \"example\": \"...\", \"translation\": \"(Chinese)\", \"visualDescription\": \"(English scene description for AI drawing)\" }" }]
+            parts: [{ text: "You are a professional language teacher. Return JSON with: identifiedWord, definition, example, translation (Simplified Chinese), visualDescription (detailed English scene description for image generation)." }]
         }
     };
 
@@ -66,7 +80,8 @@ export const queryDictionary = async (userInput: string) => {
     try {
         return JSON.parse(text || '{}');
     } catch (e) {
-        throw new Error("Failed to parse dictionary JSON: " + text);
+        console.error("JSON Parse Error on:", text);
+        throw new Error("无法解析词典响应数据");
     }
 };
 
@@ -75,21 +90,27 @@ export const queryDictionary = async (userInput: string) => {
  */
 export const generateCardImage = async (word: string, context?: string, visualDescription?: string): Promise<string> => {
     try {
-        const subject = visualDescription || `${word} in context: ${context}`;
-        const prompt = `A minimalist high-quality educational flashcard of ${subject}, white background, flat design, 4k.`;
+        const description = visualDescription || `${word} in ${context}`;
+        // Seedream 通常需要非常明确的 Prompt
+        const prompt = `A clear, minimalist educational illustration of "${description}". Clean lines, vibrant colors, white background, high quality.`;
         
         const payload = {
-            contents: [{ parts: [{ text: prompt }] }]
+            contents: [{ parts: [{ text: prompt }] }],
+            // 部分图片模型可能不支持 responseMimeType，如果报错可以移除下面这行
+            generationConfig: { temperature: 1.0 } 
         };
 
         const data = await callGmiAPI('image', CURRENT_CONFIG.imageModel, payload);
         
-        const base64 = data.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData)?.inlineData?.data;
-        if (!base64) throw new Error("No image data returned from Seedream model");
+        // 尝试从 candidates 中查找 inlineData
+        const part = data.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData);
+        if (part && part.inlineData) {
+            return `data:image/png;base64,${part.inlineData.data}`;
+        }
         
-        return `data:image/png;base64,${base64}`;
+        throw new Error("Seedream 未返回图像数据。请检查模型权限或配额。");
     } catch (e) {
-        console.error("Seedream Image Gen Failed:", e);
+        console.error("Seedream Image Error:", e);
         return getPlaceholder(word, "#FBBF24");
     }
 };
@@ -98,8 +119,8 @@ export const generateCardImage = async (word: string, context?: string, visualDe
  * 生成宠物形象 (GMI Cloud)
  */
 export const generatePetSprite = async (stage: number): Promise<string> => {
-    const stages = ["magical glowing egg", "cute yellow chick", "orange fox", "majestic dragon"];
-    const prompt = `3D character, blind box style, ${stages[stage] || 'pet'}, white background, isolated, soft lighting.`;
+    const stages = ["magical glowing egg", "cute little chick", "smart looking fox", "powerful dragon"];
+    const prompt = `3D digital art, cute ${stages[stage]}, white background, centered, high definition, toy style.`;
     
     try {
         const data = await callGmiAPI('image', CURRENT_CONFIG.imageModel, {
@@ -116,17 +137,17 @@ export const generatePetSprite = async (stage: number): Promise<string> => {
  * 宠物互动反应 (GMI Serving)
  */
 export const generatePetReaction = async (petState: any, stats: any, trigger: string) => {
-    const prompt = `The pet ${petState.name} (Stage: ${petState.stage}) just experienced: ${trigger}. Generate a short cute reaction in English and a mood (happy/sleepy/excited/proud). Output JSON.`;
+    const payload = {
+        contents: [{ parts: [{ text: `The pet ${petState.name} experienced: ${trigger}. Mood status: ${petState.mood}. Current XP: ${petState.xp}. Output a short cute English reaction and a mood in JSON.` }] }],
+        generationConfig: { responseMimeType: "application/json" }
+    };
     
     try {
-        const data = await callGmiAPI('text', CURRENT_CONFIG.textModel, {
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { responseMimeType: "application/json" }
-        });
+        const data = await callGmiAPI('text', CURRENT_CONFIG.textModel, payload);
         const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        return JSON.parse(text || '{"text": "Happy to learn!", "mood": "happy"}');
+        return JSON.parse(text || '{"text": "Happy to see you!", "mood": "happy"}');
     } catch (e) {
-        return { text: "Let's keep going!", mood: "happy" };
+        return { text: "Let's study together!", mood: "happy" };
     }
 };
 
@@ -134,7 +155,7 @@ export const generatePetReaction = async (petState: any, stats: any, trigger: st
  * 生成旅行明信片 (GMI Cloud)
  */
 export const generatePostcard = async (petName: string): Promise<string> => {
-    const prompt = `Artistic travel postcard, anime landscape, pet ${petName} wandering in a fantasy world, vibrant colors.`;
+    const prompt = `A beautiful landscape postcard featuring a small pet ${petName} traveling in a fantasy world. Anime style, colorful.`;
     try {
         const data = await callGmiAPI('image', CURRENT_CONFIG.imageModel, {
             contents: [{ parts: [{ text: prompt }] }]
