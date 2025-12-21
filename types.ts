@@ -21,34 +21,35 @@ export interface WordEntry {
   id: string;
   word: string;
   definition: string; // Basic meaning (English)
-  translation?: string; // Chinese meaning (New field)
+  translation?: string; // Chinese meaning
   context: string; // Example sentence
   visualDescription?: string; // Scene description for image gen
   addedAt: number; // Timestamp
   lastReviewedAt: number | null;
-  reviewLevel: number; // 0-5 for Spaced Repetition
+  reviewLevel: number; // 0-5 for Spaced Repetition (Mastery)
+  reviewCount: number; // NEW: Total number of times reviewed
   nextReviewDate: number; // Timestamp
   todayImage?: string; // URL/Base64 for today's generated image
-  todayImageDate?: string; // YYYY-MM-DD to check if image is stale
+  todayImageDate?: string; // YYYY-MM-DD
 }
 
 export interface PetState {
   name: string;
   stage: PetStage;
   xp: number;
-  cycle: number; // How many pets have you raised?
+  cycle: number;
   mood: 'happy' | 'sleepy' | 'excited' | 'proud';
   lastInteraction: number;
-  dailyQuote: string; // Generated daily
-  dailyQuoteDate: string; // YYYY-MM-DD
+  dailyQuote: string;
+  dailyQuoteDate: string;
   isTraveling: boolean;
   travelReturnTime?: number;
-  postcardCollection: string[]; // URLs of postcards
-  imageUrls: Record<number, string>; // Cache generated pet images per stage
+  postcardCollection: string[];
+  imageUrls: Record<number, string>;
 }
 
 export interface DailyStats {
-  date: string; // YYYY-MM-DD
+  date: string;
   wordsAdded: number;
   reviewSessionDone: boolean;
 }

@@ -1,20 +1,19 @@
 
-
 import { DailyStats, PetState, PetStage, WordEntry } from '../types';
 
 const KEYS = {
   WORDS: 'lingopet_words',
-  PET: 'lingopet_pet_v2', // Versioned to ensure structure update
+  PET: 'lingopet_pet_v2',
   STATS: 'lingopet_stats',
 };
 
-// --- Helpers ---
 const getTodayStr = () => new Date().toISOString().split('T')[0];
 
-// --- Words ---
 export const getWords = (): WordEntry[] => {
   const data = localStorage.getItem(KEYS.WORDS);
-  return data ? JSON.parse(data) : [];
+  const words: WordEntry[] = data ? JSON.parse(data) : [];
+  // Ensure reviewCount exists for legacy data
+  return words.map(w => ({ ...w, reviewCount: w.reviewCount || 0 }));
 };
 
 export const saveWord = (newWord: WordEntry) => {
@@ -23,7 +22,7 @@ export const saveWord = (newWord: WordEntry) => {
   if (existingIndex >= 0) {
     words[existingIndex] = { ...words[existingIndex], ...newWord, id: words[existingIndex].id };
   } else {
-    words.push(newWord);
+    words.push({ ...newWord, reviewCount: 0 }); // Initialize count
   }
   localStorage.setItem(KEYS.WORDS, JSON.stringify(words));
 };
@@ -37,7 +36,6 @@ export const updateWord = (id: string, updates: Partial<WordEntry>) => {
   }
 };
 
-// --- Pet ---
 const INITIAL_PET: PetState = {
   name: 'Pika',
   stage: PetStage.EGG,
@@ -56,16 +54,10 @@ export const getPetState = (): PetState => {
   const data = localStorage.getItem(KEYS.PET);
   if (data) {
       const parsed = JSON.parse(data);
-      // Migration for existing users
       if (!parsed.imageUrls) parsed.imageUrls = {};
-      
-      // --- CACHE BUSTING FIX ---
-      // Force clear the Egg image (Stage 0) every time to fix the "Ugly/Humanoid" cache issue.
-      // This ensures the user sees the new API result immediately on refresh.
       if (parsed.stage === PetStage.EGG) {
          delete parsed.imageUrls[0];
       }
-      
       return parsed;
   }
   return INITIAL_PET;
@@ -75,14 +67,11 @@ export const savePetState = (pet: PetState) => {
   try {
       localStorage.setItem(KEYS.PET, JSON.stringify(pet));
   } catch (e) {
-      console.error("Storage full, clearing images cache to save state");
-      // Fallback if storage is full: clear cached images to save vital state
       const slimPet = { ...pet, imageUrls: {} };
       localStorage.setItem(KEYS.PET, JSON.stringify(slimPet));
   }
 };
 
-// --- Stats ---
 export const getDailyStats = (): DailyStats => {
   const today = getTodayStr();
   const data = localStorage.getItem(KEYS.STATS);
@@ -100,7 +89,6 @@ export const updateDailyStats = (updates: Partial<DailyStats>) => {
   return updated;
 };
 
-// --- Spaced Repetition Logic ---
 const INTERVALS = [1, 3, 7, 14, 30];
 
 export const calculateNextReview = (currentLevel: number, wasCorrect: boolean): { level: number, date: number } => {

@@ -48,6 +48,7 @@ const Dictionary: React.FC<DictionaryProps> = ({ onWordAdded }) => {
       const data = await queryDictionary(searchTerm);
       if (data) {
         setResult(data);
+        // Added missing reviewCount property to satisfy WordEntry interface
         const newWord: WordEntry = {
           id: crypto.randomUUID(),
           word: data.identifiedWord,
@@ -58,6 +59,7 @@ const Dictionary: React.FC<DictionaryProps> = ({ onWordAdded }) => {
           addedAt: Date.now(),
           lastReviewedAt: null,
           reviewLevel: 0,
+          reviewCount: 0,
           nextReviewDate: Date.now(), 
         };
         saveWord(newWord);
@@ -94,7 +96,7 @@ const Dictionary: React.FC<DictionaryProps> = ({ onWordAdded }) => {
       </div>
 
       <div className="relative group z-10">
-        <div className={`absolute -inset-1 bg-gradient-to-r from-brand-300 to-brand-500 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200 ${isListening ? 'animate-pulse opacity-75' : ''}`}></div>
+        <div className={`absolute -inset-1 bg-gradient-to-r from-brand-300 to-brand-50 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200 ${isListening ? 'animate-pulse opacity-75' : ''}`}></div>
         <div className="relative flex items-center w-full bg-white rounded-2xl shadow-xl transition-all">
             <input
               type="text"
