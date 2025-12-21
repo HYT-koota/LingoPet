@@ -1,168 +1,148 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
+// 使用原生 fetch 以适配自定义 GMI Cloud / Serving 端点
+// 接口遵循 Gemini API 协议格式
 
-// Initialize the Google GenAI SDK using the API key from environment variables.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
-// Application configuration used for diagnostics and model references.
 export const CURRENT_CONFIG = {
-    textModel: 'gemini-3-flash-preview',
-    imageModel: 'gemini-2.5-flash-image',
-    hasTextKey: !!process.env.API_KEY,
-    hasImageKey: !!process.env.API_KEY
+    textModel: 'gemini-1.5-flash', // GMI Serving 常用文本模型
+    imageModel: process.env.IMAGE_API_MODEL || 'seedream-4-0-250828',
+    hasTextKey: !!process.env.TEXT_API_KEY,
+    hasImageKey: !!process.env.IMAGE_API_KEY
 };
 
-/**
- * Generates a simple SVG placeholder image for fallbacks when API calls fail.
- */
+// 辅助函数：生成占位图
 function getPlaceholder(text: string, color: string = "#E5E7EB") {
-    const svg = `
-    <svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
-        <rect width="512" height="512" fill="#F9FAFB"/>
-        <rect x="156" y="156" width="200" height="200" rx="40" fill="${color}" opacity="0.2"/>
-        <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="24" fill="${color}" opacity="0.6">${text}</text>
-        <path d="M256 200 L256 312 M200 256 L312 256" stroke="${color}" stroke-width="20" stroke-linecap="round" opacity="0.4"/>
-    </svg>`;
+    const svg = `<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg"><rect width="512" height="512" fill="#F9FAFB"/><rect x="156" y="156" width="200" height="200" rx="40" fill="${color}" opacity="0.2"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="24" fill="${color}" opacity="0.6">${text}</text></svg>`;
     return `data:image/svg+xml;base64,${btoa(svg)}`;
 }
 
 /**
- * Fetches dictionary information for a word using Gemini 3 Flash.
- * Returns a JSON object with definition, example, translation, and visual description.
+ * 核心请求函数：支持文本和图片 API
+ * 使用 vercel.json 定义的代理路径 /api/proxy/text 和 /api/proxy/image
  */
-export const queryDictionary = async (userInput: string) => {
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: `Define the word or phrase: "${userInput}"`,
-    config: {
-      systemInstruction: "You are a helpful dictionary assistant. Provide details about the word in JSON format including identifiedWord, definition, example, translation (Chinese), and visualDescription (English scene description for AI image generation).",
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          identifiedWord: { type: Type.STRING },
-          definition: { type: Type.STRING },
-          example: { type: Type.STRING },
-          translation: { type: Type.STRING },
-          visualDescription: { type: Type.STRING }
-        },
-        required: ["identifiedWord", "definition", "example", "translation", "visualDescription"]
-      }
-    }
-  });
-  
-  try {
-    return JSON.parse(response.text || '{}');
-  } catch (e) {
-    console.error("Failed to parse dictionary response", e);
-    throw new Error("Invalid dictionary response format");
-  }
-};
-
-/**
- * Generates an educational flashcard image for a word using Gemini 2.5 Flash Image.
- */
-export const generateCardImage = async (word: string, context?: string, visualDescription?: string): Promise<string> => {
-  try {
-    const subject = visualDescription || `${word} (context: ${context})`;
-    const prompt = `A high-quality, minimalist educational flashcard illustration of: ${subject}. Flat design, vibrant colors, white background, center composition, 4k.`;
+async function callGeminiAPI(type: 'text' | 'image', model: string, payload: any) {
+    const isImage = type === 'image';
+    const apiKey = isImage ? process.env.IMAGE_API_KEY : process.env.TEXT_API_KEY;
+    const baseUrl = isImage ? '/api/proxy/image' : '/api/proxy/text';
     
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
-      contents: { parts: [{ text: prompt }] }
+    // 构造 Gemini 协议的请求 URL
+    const url = `${baseUrl}/models/${model}:generateContent?key=${apiKey}`;
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
     });
 
-    // Iterate through response parts to find the generated image data.
-    for (const part of response.candidates?.[0]?.content?.parts || []) {
-      if (part.inlineData) {
-        return `data:image/png;base64,${part.inlineData.data}`;
-      }
+    if (!response.ok) {
+        const err = await response.text();
+        throw new Error(`API Error (${response.status}): ${err}`);
     }
-    throw new Error("No image data returned from model");
-  } catch (e) {
-    console.error("Card image generation failed", e);
-    return getPlaceholder(word, "#FBBF24");
-  }
-};
 
-/**
- * Generates a character sprite based on the pet's evolution stage.
- */
-export const generatePetSprite = async (stage: number): Promise<string> => {
-    let description = "";
-    if (stage === 0) description = "a cute magical glowing pet egg with star patterns";
-    else if (stage === 1) description = "a cute round yellow chibi chick, big eyes";
-    else if (stage === 2) description = "a cute mischievous chibi orange fox, fluffy tail";
-    else if (stage === 3) description = "a majestic fantasy winged creature, elegant chibi style";
-
-    const prompt = `3D character model, blind box toy style, ${description}, soft clay texture, isolated on white background, front view, masterpiece.`;
-    try {
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash-image',
-          contents: { parts: [{ text: prompt }] }
-        });
-
-        for (const part of response.candidates?.[0]?.content?.parts || []) {
-          if (part.inlineData) {
-            return `data:image/png;base64,${part.inlineData.data}`;
-          }
-        }
-        throw new Error("No image data returned from model");
-    } catch (e) {
-        console.error("Pet sprite generation failed", e);
-        return getPlaceholder("Pet", "#FCD34D");
-    }
+    return await response.json();
 }
 
 /**
- * Generates a dialogue reaction and mood based on pet status and events.
+ * 词典查询：使用 GMI Serving
  */
-export const generatePetReaction = async (petState: any, stats: any, trigger: string) => {
-    const prompt = `Event: ${trigger}. Pet Name: ${petState.name}, Stage: ${petState.stage}, XP: ${petState.xp}, Words Added Today: ${stats.wordsAdded}.`;
-    
-    const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: prompt,
-        config: {
-            systemInstruction: "You are the pet's consciousness. Generate a short, cute reaction message in English and an appropriate mood. Mood must be one of: happy, sleepy, excited, proud. Output JSON.",
+export const queryDictionary = async (userInput: string) => {
+    const payload = {
+        contents: [{ parts: [{ text: `Define the word or phrase: "${userInput}"` }] }],
+        generationConfig: {
             responseMimeType: "application/json",
-            responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                    text: { type: Type.STRING },
-                    mood: { type: Type.STRING, enum: ["happy", "sleepy", "excited", "proud"] }
-                },
-                required: ["text", "mood"]
-            }
+            // 由于某些第三方转发不支持 responseSchema 参数，这里通过 systemInstruction 强制约束
+        },
+        systemInstruction: {
+            parts: [{ text: "You are a dictionary. Return JSON only with fields: identifiedWord, definition, example, translation (Chinese), visualDescription (English scene)." }]
         }
-    });
+    };
+
+    const data = await callGeminiAPI('text', CURRENT_CONFIG.textModel, payload);
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
     
     try {
-        return JSON.parse(response.text || '{}');
+        return JSON.parse(text || '{}');
     } catch (e) {
-        return { text: "Wow! I'm learning so much!", mood: "happy" };
+        console.error("JSON Parse Error", text);
+        throw new Error("Failed to parse dictionary response");
     }
 };
 
 /**
- * Generates a travel postcard image for the pet's journey memories.
+ * 生成图片：使用 GMI Cloud (Seedream 4.0)
+ */
+export const generateCardImage = async (word: string, context?: string, visualDescription?: string): Promise<string> => {
+    try {
+        const subject = visualDescription || `${word} (context: ${context})`;
+        const prompt = `A minimalist educational flashcard illustration of: ${subject}. Flat design, vibrant colors, white background, center composition, 4k.`;
+        
+        const payload = {
+            contents: [{ parts: [{ text: prompt }] }]
+        };
+
+        const data = await callGeminiAPI('image', CURRENT_CONFIG.imageModel, payload);
+        
+        // 解析返回的 base64 图像
+        for (const part of data.candidates?.[0]?.content?.parts || []) {
+            if (part.inlineData) {
+                return `data:image/png;base64,${part.inlineData.data}`;
+            }
+        }
+        throw new Error("No image data in response");
+    } catch (e) {
+        console.error("Image Gen Error", e);
+        return getPlaceholder(word, "#FBBF24");
+    }
+};
+
+/**
+ * 生成宠物形象
+ */
+export const generatePetSprite = async (stage: number): Promise<string> => {
+    let desc = ["a magical glowing egg", "a cute yellow chick", "a mischievous fox", "a majestic dragon"][stage] || "a pet";
+    const prompt = `3D character model, blind box toy style, ${desc}, soft clay texture, isolated on white background, front view.`;
+    
+    try {
+        const data = await callGeminiAPI('image', CURRENT_CONFIG.imageModel, {
+            contents: [{ parts: [{ text: prompt }] }]
+        });
+        
+        const base64 = data.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData)?.inlineData?.data;
+        return base64 ? `data:image/png;base64,${base64}` : getPlaceholder("Pet", "#FCD34D");
+    } catch (e) {
+        return getPlaceholder("Pet", "#FCD34D");
+    }
+};
+
+/**
+ * 宠物互动反应
+ */
+export const generatePetReaction = async (petState: any, stats: any, trigger: string) => {
+    const prompt = `Event: ${trigger}. Pet: ${petState.name}, XP: ${petState.xp}. Respond in JSON { "text": "...", "mood": "happy/sleepy/excited/proud" }`;
+    
+    try {
+        const data = await callGeminiAPI('text', CURRENT_CONFIG.textModel, {
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { responseMimeType: "application/json" }
+        });
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        return JSON.parse(text || '{"text": "Wow!", "mood": "happy"}');
+    } catch (e) {
+        return { text: "Keep learning!", mood: "happy" };
+    }
+};
+
+/**
+ * 生成旅行明信片
  */
 export const generatePostcard = async (petName: string): Promise<string> => {
-    const prompt = `A beautiful travel postcard from a far away fantasy land, featuring ${petName}'s silhouette exploring a scenic landmark, artistic illustration style, vibrant colors, "Greetings from far away" text integrated, 4k.`;
+    const prompt = `A beautiful landscape travel postcard from a fantasy world, featuring the silhouette of a pet named ${petName}, artistic anime style, vibrant colors.`;
     try {
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash-image',
-          contents: { parts: [{ text: prompt }] }
+        const data = await callGeminiAPI('image', CURRENT_CONFIG.imageModel, {
+            contents: [{ parts: [{ text: prompt }] }]
         });
-
-        for (const part of response.candidates?.[0]?.content?.parts || []) {
-          if (part.inlineData) {
-            return `data:image/png;base64,${part.inlineData.data}`;
-          }
-        }
-        throw new Error("No image data returned from model");
+        const base64 = data.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData)?.inlineData?.data;
+        return base64 ? `data:image/png;base64,${base64}` : getPlaceholder("Postcard", "#6366F1");
     } catch (e) {
-        console.error("Postcard generation failed", e);
         return getPlaceholder("Postcard", "#6366F1");
     }
 };

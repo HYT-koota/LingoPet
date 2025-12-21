@@ -8,17 +8,16 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     define: {
-      // The API key must be obtained exclusively from process.env.API_KEY
       'process.env.API_KEY': JSON.stringify(env.API_KEY || ''),
       
-      // Fallbacks for legacy configurations
-      'process.env.TEXT_API_KEY': JSON.stringify(env.API_KEY || env.TEXT_API_KEY || ''),
-      'process.env.TEXT_API_BASE_URL': JSON.stringify(env.TEXT_API_BASE_URL || env.API_BASE_URL || 'https://api.openai.com/v1'),
-      'process.env.TEXT_API_MODEL': JSON.stringify(env.TEXT_API_MODEL || env.API_MODEL || 'gemini-3-flash-preview'),
+      // 关键：将 GMI 相关的环境变量显式暴露给前端
+      'process.env.TEXT_API_KEY': JSON.stringify(env.TEXT_API_KEY || ''),
+      'process.env.IMAGE_API_KEY': JSON.stringify(env.IMAGE_API_KEY || ''),
+      'process.env.IMAGE_API_MODEL': JSON.stringify(env.IMAGE_API_MODEL || 'seedream-4-0-250828'),
       
-      'process.env.IMAGE_API_KEY': JSON.stringify(env.API_KEY || env.IMAGE_API_KEY || ''),
-      'process.env.IMAGE_API_BASE_URL': JSON.stringify(env.IMAGE_API_BASE_URL || env.API_BASE_URL || 'https://api.openai.com/v1'),
-      'process.env.IMAGE_API_MODEL': JSON.stringify(env.IMAGE_API_MODEL || 'gemini-2.5-flash-image')
+      // 保留备用配置
+      'process.env.TEXT_API_BASE_URL': JSON.stringify(env.TEXT_API_BASE_URL || ''),
+      'process.env.IMAGE_API_BASE_URL': JSON.stringify(env.IMAGE_API_BASE_URL || '')
     }
   };
 });
