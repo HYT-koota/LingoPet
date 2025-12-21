@@ -1,16 +1,19 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 
-// Use gemini-3-flash-preview for general text tasks and gemini-2.5-flash-image for images.
+// Initialize the Google GenAI SDK using the API key from environment variables.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+// Application configuration used for diagnostics and model references.
 export const CURRENT_CONFIG = {
     textModel: 'gemini-3-flash-preview',
     imageModel: 'gemini-2.5-flash-image',
-    hasTextKey: !!process.env.API_KEY, 
+    hasTextKey: !!process.env.API_KEY,
     hasImageKey: !!process.env.API_KEY
 };
 
 /**
- * Creates a placeholder image in case of API failure.
+ * Generates a simple SVG placeholder image for fallbacks when API calls fail.
  */
 function getPlaceholder(text: string, color: string = "#E5E7EB") {
     const svg = `
@@ -24,145 +27,142 @@ function getPlaceholder(text: string, color: string = "#E5E7EB") {
 }
 
 /**
- * Define a word using gemini-3-flash-preview with structured JSON output.
+ * Fetches dictionary information for a word using Gemini 3 Flash.
+ * Returns a JSON object with definition, example, translation, and visual description.
  */
 export const queryDictionary = async (userInput: string) => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
   const response = await ai.models.generateContent({
-    model: CURRENT_CONFIG.textModel,
-    contents: `Define the English word: "${userInput}"`,
+    model: 'gemini-3-flash-preview',
+    contents: `Define the word or phrase: "${userInput}"`,
     config: {
-      systemInstruction: "You are a helpful dictionary assistant. Provide the word's definition, an example sentence, its Chinese translation, and a concise visual description for an AI image generator. Output MUST be valid JSON.",
+      systemInstruction: "You are a helpful dictionary assistant. Provide details about the word in JSON format including identifiedWord, definition, example, translation (Chinese), and visualDescription (English scene description for AI image generation).",
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
         properties: {
-          identifiedWord: { type: Type.STRING, description: "The confirmed English word." },
-          definition: { type: Type.STRING, description: "The English definition." },
-          example: { type: Type.STRING, description: "An example sentence." },
-          translation: { type: Type.STRING, description: "The Chinese translation." },
-          visualDescription: { type: Type.STRING, description: "A simple visual scene description for image generation." }
+          identifiedWord: { type: Type.STRING },
+          definition: { type: Type.STRING },
+          example: { type: Type.STRING },
+          translation: { type: Type.STRING },
+          visualDescription: { type: Type.STRING }
         },
         required: ["identifiedWord", "definition", "example", "translation", "visualDescription"]
       }
-    },
+    }
   });
-
+  
   try {
-    const jsonStr = response.text || "{}";
-    return JSON.parse(jsonStr.trim());
+    return JSON.parse(response.text || '{}');
   } catch (e) {
-    console.error("JSON parsing error:", e);
-    throw new Error("Failed to parse dictionary API response.");
+    console.error("Failed to parse dictionary response", e);
+    throw new Error("Invalid dictionary response format");
   }
 };
 
 /**
- * Generate a flashcard image using gemini-2.5-flash-image.
+ * Generates an educational flashcard image for a word using Gemini 2.5 Flash Image.
  */
 export const generateCardImage = async (word: string, context?: string, visualDescription?: string): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
-  const subject = visualDescription || `${word} (context: ${context})`;
-  const prompt = `A minimalist educational flashcard illustration of: ${subject}. Flat design, vibrant colors, white background, center composition.`;
-  
   try {
+    const subject = visualDescription || `${word} (context: ${context})`;
+    const prompt = `A high-quality, minimalist educational flashcard illustration of: ${subject}. Flat design, vibrant colors, white background, center composition, 4k.`;
+    
     const response = await ai.models.generateContent({
-      model: CURRENT_CONFIG.imageModel,
-      contents: [{ parts: [{ text: prompt }] }],
+      model: 'gemini-2.5-flash-image',
+      contents: { parts: [{ text: prompt }] }
     });
 
-    // Iterate through all parts to find the image part
+    // Iterate through response parts to find the generated image data.
     for (const part of response.candidates?.[0]?.content?.parts || []) {
       if (part.inlineData) {
         return `data:image/png;base64,${part.inlineData.data}`;
       }
     }
-    throw new Error("No image part found in response.");
+    throw new Error("No image data returned from model");
   } catch (e) {
-    console.error("Image generation failed:", e);
+    console.error("Card image generation failed", e);
     return getPlaceholder(word, "#FBBF24");
   }
 };
 
 /**
- * Generate a pet sprite image using gemini-2.5-flash-image.
+ * Generates a character sprite based on the pet's evolution stage.
  */
 export const generatePetSprite = async (stage: number): Promise<string> => {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
     let description = "";
     if (stage === 0) description = "a cute magical glowing pet egg with star patterns";
     else if (stage === 1) description = "a cute round yellow chibi chick, big eyes";
     else if (stage === 2) description = "a cute mischievous chibi orange fox, fluffy tail";
     else if (stage === 3) description = "a majestic fantasy winged creature, elegant chibi style";
 
-    const prompt = `3D character model, blind box toy style, ${description}, soft clay texture, isolated on pure white background, front view.`;
-    
+    const prompt = `3D character model, blind box toy style, ${description}, soft clay texture, isolated on white background, front view, masterpiece.`;
     try {
         const response = await ai.models.generateContent({
-            model: CURRENT_CONFIG.imageModel,
-            contents: [{ parts: [{ text: prompt }] }],
+          model: 'gemini-2.5-flash-image',
+          contents: { parts: [{ text: prompt }] }
         });
 
         for (const part of response.candidates?.[0]?.content?.parts || []) {
-            if (part.inlineData) {
-                return `data:image/png;base64,${part.inlineData.data}`;
-            }
+          if (part.inlineData) {
+            return `data:image/png;base64,${part.inlineData.data}`;
+          }
         }
-        return getPlaceholder("Pet", "#FCD34D");
+        throw new Error("No image data returned from model");
     } catch (e) {
-        console.error("Pet sprite generation failed:", e);
+        console.error("Pet sprite generation failed", e);
         return getPlaceholder("Pet", "#FCD34D");
     }
 }
 
 /**
- * Generate a pet reaction message using gemini-3-flash-preview.
+ * Generates a dialogue reaction and mood based on pet status and events.
  */
 export const generatePetReaction = async (petState: any, stats: any, trigger: string) => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
-  const response = await ai.models.generateContent({
-    model: CURRENT_CONFIG.textModel,
-    contents: `Trigger Event: ${trigger}. Current XP: ${petState.xp}. Daily Words: ${stats.wordsAdded}.`,
-    config: {
-      systemInstruction: `You are ${petState.name}, a helpful virtual pet. React to the user's progress. Use a tone matching your current mood. Output JSON.`,
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          text: { type: Type.STRING, description: "The message from the pet." },
-          mood: { type: Type.STRING, description: "Choose from: happy, sleepy, excited, proud." }
-        },
-        required: ["text", "mood"]
-      }
-    },
-  });
-  
-  try {
-    return JSON.parse(response.text || "{}");
-  } catch (e) {
-    return { text: "Keep going! You're doing great!", mood: "happy" };
-  }
+    const prompt = `Event: ${trigger}. Pet Name: ${petState.name}, Stage: ${petState.stage}, XP: ${petState.xp}, Words Added Today: ${stats.wordsAdded}.`;
+    
+    const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: prompt,
+        config: {
+            systemInstruction: "You are the pet's consciousness. Generate a short, cute reaction message in English and an appropriate mood. Mood must be one of: happy, sleepy, excited, proud. Output JSON.",
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    text: { type: Type.STRING },
+                    mood: { type: Type.STRING, enum: ["happy", "sleepy", "excited", "proud"] }
+                },
+                required: ["text", "mood"]
+            }
+        }
+    });
+    
+    try {
+        return JSON.parse(response.text || '{}');
+    } catch (e) {
+        return { text: "Wow! I'm learning so much!", mood: "happy" };
+    }
 };
 
 /**
- * Generate a travel postcard image using gemini-2.5-flash-image.
+ * Generates a travel postcard image for the pet's journey memories.
  */
 export const generatePostcard = async (petName: string): Promise<string> => {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
-    const prompt = `Beautiful anime scenery landscape photography, vibrant colors, 4k resolution.`;
+    const prompt = `A beautiful travel postcard from a far away fantasy land, featuring ${petName}'s silhouette exploring a scenic landmark, artistic illustration style, vibrant colors, "Greetings from far away" text integrated, 4k.`;
     try {
         const response = await ai.models.generateContent({
-            model: CURRENT_CONFIG.imageModel,
-            contents: [{ parts: [{ text: prompt }] }],
+          model: 'gemini-2.5-flash-image',
+          contents: { parts: [{ text: prompt }] }
         });
 
         for (const part of response.candidates?.[0]?.content?.parts || []) {
-            if (part.inlineData) {
-                return `data:image/png;base64,${part.inlineData.data}`;
-            }
+          if (part.inlineData) {
+            return `data:image/png;base64,${part.inlineData.data}`;
+          }
         }
-        return getPlaceholder("Travel", "#60A5FA");
-    } catch(e) {
-        return getPlaceholder("Travel", "#60A5FA");
+        throw new Error("No image data returned from model");
+    } catch (e) {
+        console.error("Postcard generation failed", e);
+        return getPlaceholder("Postcard", "#6366F1");
     }
 };
