@@ -7,6 +7,9 @@
 export const CURRENT_CONFIG = {
     textModel: 'gemini-1.5-flash', 
     imageModel: process.env.IMAGE_API_MODEL || 'seedream-4-0-250828',
+    // 环境变量优先，若无则默认使用 Vercel 代理路径
+    textBaseUrl: (process.env.TEXT_API_BASE_URL || '/api/proxy/text').replace(/\/$/, ''),
+    imageBaseUrl: (process.env.IMAGE_API_BASE_URL || '/api/proxy/image').replace(/\/$/, ''),
     hasTextKey: !!process.env.TEXT_API_KEY,
     hasImageKey: !!process.env.IMAGE_API_KEY
 };
@@ -18,7 +21,7 @@ function getPlaceholder(text: string, color: string = "#E5E7EB") {
 }
 
 /**
- * 通用请求包装器，防止 404/502 导致的解析错误
+ * 通用请求包装器
  */
 async function request(url: string, options: RequestInit) {
     const response = await fetch(url, options);
@@ -27,11 +30,11 @@ async function request(url: string, options: RequestInit) {
     if (!response.ok) {
         const errorText = await response.text();
         console.error(`API Error [${response.status}]:`, errorText);
-        throw new Error(`请求失败: ${response.status} ${errorText.substring(0, 50)}`);
+        throw new Error(`API 返回错误 (${response.status}): ${errorText.substring(0, 100)}`);
     }
 
     if (!contentType || !contentType.includes("application/json")) {
-        throw new Error("接口返回了非 JSON 内容，请检查代理配置或 API 路径。");
+        throw new Error("接口返回格式异常（非 JSON），请确认 API 域名或 Vercel 代理配置是否正确。");
     }
 
     return await response.json();
@@ -42,10 +45,9 @@ async function request(url: string, options: RequestInit) {
  */
 async function callTextAPI(payload: any) {
     const apiKey = process.env.TEXT_API_KEY;
-    // 使用 OpenAI 标准路径
-    const url = `/api/proxy/text/v1/chat/completions`;
-
     if (!apiKey) throw new Error("TEXT_API_KEY 缺失");
+
+    const url = `${CURRENT_CONFIG.textBaseUrl}/v1/chat/completions`;
 
     const data = await request(url, {
         method: 'POST',
@@ -67,11 +69,12 @@ async function callSeedreamAsync(prompt: string): Promise<string> {
     const model = CURRENT_CONFIG.imageModel;
     if (!apiKey) throw new Error("IMAGE_API_KEY 缺失");
 
-    // 1. 创建生成任务
-    // 路径遵循 GMI Cloud 异步标准: /v1/models/{model}:generateImages
-    const createUrl = `/api/proxy/image/v1/models/${model}:generateImages?key=${apiKey}`;
+    const baseUrl = CURRENT_CONFIG.imageBaseUrl;
     
-    // Seedream 4.0 特定参数结构
+    // 1. 创建生成任务
+    // 规范路径: /v1/models/{model}:generateImages
+    const createUrl = `${baseUrl}/v1/models/${model}:generateImages?key=${apiKey}`;
+    
     const createPayload = {
         prompt: prompt,
         aspect_ratio: "1:1",
@@ -85,17 +88,20 @@ async function callSeedreamAsync(prompt: string): Promise<string> {
     });
 
     // 2. 获取 Operation Name 并开始轮询
-    const operationName = operation.name;
+    // GMI Cloud 的 operationName 通常已经是 "operations/xxxx" 的格式
+    const operationName = operation.name; 
     if (!operationName) {
-        throw new Error("未获取到任务 ID (Operation Name)");
+        throw new Error("任务创建失败，未获得 Operation ID");
     }
 
-    const pollUrl = `/api/proxy/image/v1/${operationName}?key=${apiKey}`;
+    // 轮询路径: /v1/{operationName}
+    const pollUrl = `${baseUrl}/v1/${operationName}?key=${apiKey}`;
+    
     let attempts = 0;
-    const maxAttempts = 20; // 约 60-100 秒超时
+    const maxAttempts = 30; // 轮询约 2 分钟
 
     while (attempts < maxAttempts) {
-        await new Promise(r => setTimeout(r, 4000)); // 每 4 秒检查一次
+        await new Promise(r => setTimeout(r, 4000)); // 每 4 秒轮询一次
         
         const status = await request(pollUrl, { method: 'GET' });
         
@@ -103,18 +109,18 @@ async function callSeedreamAsync(prompt: string): Promise<string> {
             if (status.error) {
                 throw new Error(`生成失败: ${status.error.message}`);
             }
-            // 提取结果中的图像 Base64
+            // 提取 Base64 数据
             const generatedImages = status.response?.generatedImages;
             const base64 = generatedImages?.[0]?.image?.imageBytes;
             
-            if (!base64) throw new Error("任务完成但未找到图像数据");
+            if (!base64) throw new Error("任务完成，但未返回有效的图像数据");
             return `data:image/png;base64,${base64}`;
         }
         
         attempts++;
     }
 
-    throw new Error("图像生成超时，请稍后在笔记本中查看");
+    throw new Error("图像生成超时，Seedream 模型任务排队时间过长。");
 }
 
 /**
@@ -134,7 +140,7 @@ export const queryDictionary = async (userInput: string) => {
     try {
         return JSON.parse(text || '{}');
     } catch (e) {
-        throw new Error("无法解析返回的 JSON 数据");
+        throw new Error("解析文本 JSON 失败");
     }
 };
 
@@ -143,7 +149,7 @@ export const queryDictionary = async (userInput: string) => {
  */
 export const generateCardImage = async (word: string, context?: string, visualDescription?: string): Promise<string> => {
     try {
-        const prompt = `Educational flashcard for "${word}". Visual: ${visualDescription || context}. Minimalist style, white background.`;
+        const prompt = `Flashcard: ${word}. Scene: ${visualDescription || context}. Digital art, clean background.`;
         return await callSeedreamAsync(prompt);
     } catch (e) {
         console.error("Seedream Error:", e);
@@ -155,8 +161,8 @@ export const generateCardImage = async (word: string, context?: string, visualDe
  * 生成宠物形象
  */
 export const generatePetSprite = async (stage: number): Promise<string> => {
-    const stages = ["magical glowing egg", "cute yellow chick", "orange fox", "celestial dragon"];
-    const prompt = `A single 3D character of a ${stages[stage]}, white background, Pixar style, high quality.`;
+    const stages = ["magical egg", "cute chick", "fox creature", "dragon mascot"];
+    const prompt = `Full body character of a ${stages[stage]}, 3D game style, white background.`;
     try {
         return await callSeedreamAsync(prompt);
     } catch (e) {
@@ -181,7 +187,7 @@ export const generatePetReaction = async (petState: any, stats: any, trigger: st
         const text = await callTextAPI(payload);
         return JSON.parse(text || '{"text": "Yey!", "mood": "happy"}');
     } catch (e) {
-        return { text: "Keep it up!", mood: "happy" };
+        return { text: "Nice work!", mood: "happy" };
     }
 };
 
@@ -189,7 +195,7 @@ export const generatePetReaction = async (petState: any, stats: any, trigger: st
  * 生成旅行明信片
  */
 export const generatePostcard = async (petName: string): Promise<string> => {
-    const prompt = `Artistic travel postcard from a fantasy land, pet ${petName} exploring, vibrant colors, anime background.`;
+    const prompt = `Postcard style: ${petName} is traveling in a beautiful landscape, anime style.`;
     try {
         return await callSeedreamAsync(prompt);
     } catch (e) {
