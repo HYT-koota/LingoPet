@@ -7,7 +7,7 @@
     },
     {
       "source": "/api/proxy/image/:path*",
-      "destination": "https://api.gmicloud.ai/:path*"
+      "destination": "https://console.gmicloud.ai/:path*"
     }
   ]
 }
