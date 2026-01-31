@@ -1,21 +1,17 @@
 /**
  * 核心配置诊断
+ * 注意：Vite define 只替换字面量 process.env.XXX，不能使用动态访问
  */
-const getEnv = (key: string, fallback: string = "") => {
-    const val = (process.env as any)[key];
-    return val && val !== "undefined" ? val : fallback;
-};
-
 export const CURRENT_CONFIG = {
     // 文本 API (DeepSeek/智谱 - OpenAI 兼容)
-    textModel: getEnv('TEXT_API_MODEL', 'deepseek-chat'),
-    textBaseUrl: getEnv('TEXT_API_BASE_URL', 'https://api.deepseek.com').replace(/\/$/, ''),
-    hasTextKey: !!getEnv('TEXT_API_KEY'),
+    textModel: process.env.TEXT_API_MODEL || 'deepseek-chat',
+    textBaseUrl: (process.env.TEXT_API_BASE_URL || 'https://api.deepseek.com').replace(/\/$/, ''),
+    hasTextKey: !!(process.env.TEXT_API_KEY && process.env.TEXT_API_KEY !== ''),
 
     // 图像 API (SiliconFlow - OpenAI 兼容)
-    imageModel: getEnv('IMAGE_API_MODEL', 'Qwen/Qwen-Image'),
-    imageBaseUrl: getEnv('IMAGE_API_BASE_URL', 'https://api.siliconflow.cn/v1').replace(/\/$/, ''),
-    hasImageKey: !!getEnv('IMAGE_API_KEY')
+    imageModel: process.env.IMAGE_API_MODEL || 'Qwen/Qwen-Image',
+    imageBaseUrl: (process.env.IMAGE_API_BASE_URL || 'https://api.siliconflow.cn/v1').replace(/\/$/, ''),
+    hasImageKey: !!(process.env.IMAGE_API_KEY && process.env.IMAGE_API_KEY !== '')
 };
 
 // 【重要】在浏览器控制台打印配置信息
@@ -39,10 +35,9 @@ function getPlaceholder(text: string, color: string = "#E5E7EB") {
  * OpenAI 兼容格式文本请求 (DeepSeek/智谱)
  */
 async function callOpenAITextAPI(messages: any[], jsonMode: boolean = true) {
-    const apiKey = (process.env as any).TEXT_API_KEY;
+    const apiKey = process.env.TEXT_API_KEY;
 
     if (!apiKey) throw new Error("缺少 TEXT_API_KEY，请在 Vercel 环境变量中设置");
-    if (CURRENT_CONFIG.textModel === 'MODEL_NOT_CONFIGURED') throw new Error("缺少 TEXT_API_MODEL，请在环境变量中设置模型名称");
 
     const url = `${CURRENT_CONFIG.textBaseUrl}/v1/chat/completions`;
 
@@ -90,7 +85,7 @@ async function callOpenAITextAPI(messages: any[], jsonMode: boolean = true) {
  * SiliconFlow/OpenAI 兼容图像生成
  */
 async function callImageAPI(prompt: string): Promise<string> {
-    const apiKey = (process.env as any).IMAGE_API_KEY;
+    const apiKey = process.env.IMAGE_API_KEY;
     if (!apiKey) throw new Error("缺少 IMAGE_API_KEY，请在 Vercel 环境变量中设置");
 
     const url = `${CURRENT_CONFIG.imageBaseUrl}/images/generations`;
