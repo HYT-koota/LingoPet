@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:fragstats.org)",
+      "Bash",
+      "Read",
+      "Write",
+      "Edit",
+      "Glob",
+      "Grep",
+      "Bash(\":*)",
+      "Bash(\"D:\\\\conda_env\\\\first_env\\\\python.exe\" -m pip install -r \"D:\\\\MyPrograms\\\\Bluegreen_XGBoost\\\\requirements.txt\")",
+      "Bash(\"D:\\\\conda_env\\\\first_env\\\\python.exe\" \"D:\\\\MyPrograms\\\\Bluegreen_XGBoost\\\\xgboost_shap_analysis.py\")",
+      "Bash(dir:*)",
+      "Bash(\"D:\\\\conda_env\\\\first_env\\\\python.exe\" xgboost_shap_analysis.py)",
+      "Bash(python -m py_compile:*)",
+      "Bash(python:*)",
+      "Bash(pip install:*)"
+    ]
+  }
+}
