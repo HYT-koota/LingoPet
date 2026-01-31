@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { WordEntry, ReviewMode } from '../types';
 import { generateCardImage } from '../services/apiService';
-import { updateWord, calculateNextReview } from '../services/storageService';
+import { updateWord, calculateNextReview } from '../services/supabaseDataService';
 import { Play, Pause, Check, X, RotateCw, Shuffle } from 'lucide-react';
 
 interface ReviewSessionProps {

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Search, Calendar, Zap, BookOpen, Clock, BarChart3 } from 'lucide-react';
 import { WordEntry } from '../types';
-import { getWords } from '../services/storageService';
+import { getWords } from '../services/supabaseDataService';
 
 interface NotebookProps {
   onBack: () => void;
