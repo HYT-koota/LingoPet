@@ -8,7 +8,7 @@ const getEnv = (key: string, fallback: string = "") => {
 
 export const CURRENT_CONFIG = {
     // 文本 API (DeepSeek/智谱 - OpenAI 兼容)
-    textModel: getEnv('TEXT_API_MODEL', 'MODEL_NOT_CONFIGURED'),
+    textModel: getEnv('TEXT_API_MODEL', 'deepseek-chat'),
     textBaseUrl: getEnv('TEXT_API_BASE_URL', 'https://api.deepseek.com').replace(/\/$/, ''),
     hasTextKey: !!getEnv('TEXT_API_KEY'),
 
