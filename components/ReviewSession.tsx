@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { WordEntry, ReviewMode } from '../types';
-import { generateCardImage } from '../services/geminiService';
+import { generateCardImage } from '../services/apiService';
 import { updateWord, calculateNextReview } from '../services/storageService';
 import { Play, Pause, Check, X, RotateCw, Shuffle } from 'lucide-react';
 

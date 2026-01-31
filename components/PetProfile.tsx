@@ -2,7 +2,7 @@
 import React from 'react';
 import { PetState, PetStage } from '../types';
 import { Trophy, BookOpen, MapPin, Star, Activity, ChevronRight } from 'lucide-react';
-import { CURRENT_CONFIG } from '../services/geminiService';
+import { CURRENT_CONFIG } from '../services/apiService';
 import { getWords } from '../services/storageService';
 
 interface PetProfileProps {

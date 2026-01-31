@@ -13,7 +13,7 @@ import {
   getDailyStats, 
   updateDailyStats 
 } from './services/storageService';
-import { generatePetReaction, generatePostcard, generatePetSprite } from './services/geminiService';
+import { generatePetReaction, generatePostcard, generatePetSprite } from './services/apiService';
 import { Book, Search, Home, Trophy, Image as ImageIcon, User, Plane, Egg } from 'lucide-react';
 
 const App: React.FC = () => {

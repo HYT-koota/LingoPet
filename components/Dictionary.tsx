@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Mic, Search, Loader2, CheckCircle, Sparkles, BrainCircuit } from 'lucide-react';
-import { queryDictionary, generateCardImage } from '../services/geminiService';
+import { queryDictionary, generateCardImage } from '../services/apiService';
 import { saveWord, updateWord, updateDailyStats, getDailyStats } from '../services/storageService';
 import { WordEntry } from '../types';
 

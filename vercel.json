@@ -1,13 +1,3 @@
-
 {
-  "rewrites": [
-    {
-      "source": "/api/proxy/text/:path*",
-      "destination": "https://api.gmi-serving.com/:path*"
-    },
-    {
-      "source": "/api/proxy/image/:path*",
-      "destination": "https://console.gmicloud.ai/:path*"
-    }
-  ]
+  "rewrites": []
 }
