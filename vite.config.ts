@@ -12,7 +12,7 @@ export default defineConfig(({ mode }) => {
       'process.env.TEXT_API_BASE_URL': JSON.stringify(env.TEXT_API_BASE_URL || 'https://api.deepseek.com'),
 
       'process.env.IMAGE_API_KEY': JSON.stringify(env.IMAGE_API_KEY || ''),
-      'process.env.IMAGE_API_MODEL': JSON.stringify(env.IMAGE_API_MODEL || 'stabilityai/stable-diffusion-3-5b'),
+      'process.env.IMAGE_API_MODEL': JSON.stringify(env.IMAGE_API_MODEL || 'Qwen/Qwen-Image'),
       'process.env.IMAGE_API_BASE_URL': JSON.stringify(env.IMAGE_API_BASE_URL || 'https://api.siliconflow.cn/v1')
     }
   };

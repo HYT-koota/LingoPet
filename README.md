@@ -50,8 +50,13 @@ TEXT_API_MODEL=glm-4
 
 ### Alternative Image API Options
 
-SiliconFlow supports many models including:
-- `stabilityai/stable-diffusion-3-5b`
+**Qwen Image (default):**
+```bash
+IMAGE_API_MODEL=Qwen/Qwen-Image
+IMAGE_API_BASE_URL=https://api.siliconflow.cn/v1
+```
+
+SiliconFlow also supports other models:
 - `black-forest-labs/FLUX.1-dev`
 - `black-forest-labs/FLUX.1-schnell`
 

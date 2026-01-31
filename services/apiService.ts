@@ -13,7 +13,7 @@ export const CURRENT_CONFIG = {
     hasTextKey: !!getEnv('TEXT_API_KEY'),
 
     // 图像 API (SiliconFlow - OpenAI 兼容)
-    imageModel: getEnv('IMAGE_API_MODEL', 'stabilityai/stable-diffusion-3-5b'),
+    imageModel: getEnv('IMAGE_API_MODEL', 'Qwen/Qwen-Image'),
     imageBaseUrl: getEnv('IMAGE_API_BASE_URL', 'https://api.siliconflow.cn/v1').replace(/\/$/, ''),
     hasImageKey: !!getEnv('IMAGE_API_KEY')
 };
@@ -104,8 +104,8 @@ async function callImageAPI(prompt: string): Promise<string> {
         body: JSON.stringify({
             model: CURRENT_CONFIG.imageModel,
             prompt: prompt,
-            image_size: "1024x1024",
-            num_inference_steps: 28,
+            image_size: "512x512",
+            num_inference_steps: 20,
             guidance_scale: 7.5,
             num_images: 1
         })
