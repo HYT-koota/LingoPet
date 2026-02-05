@@ -10,7 +10,15 @@ const getUserWithRetry = async (maxRetries = 2): Promise<{ data: { user: any } }
     try {
       console.log(`[Auth Retry] Attempt ${i + 1}/${maxRetries} calling supabase.auth.getUser()`);
       const startTime = Date.now();
-      const result = await supabase.auth.getUser();
+
+      // 添加超时保护
+      const result = await Promise.race([
+        supabase.auth.getUser(),
+        new Promise<{ data: { user: any } }>((_, reject) =>
+          setTimeout(() => reject(new Error(`getUser timeout after 5000ms on attempt ${i + 1}`)), 5000)
+        )
+      ]);
+
       const elapsed = Date.now() - startTime;
       console.log(`[Auth Retry] Attempt ${i + 1} completed in ${elapsed}ms, user:`, result.data.user ? '✅ Present' : '❌ None');
 
@@ -87,6 +95,43 @@ export const debugDatabaseAccess = async () => {
     return { success: !test.error && !petTest.error, test, petTest };
   } catch (error) {
     console.error('[DB Debug] Error:', error);
+    return { success: false, error };
+  }
+};
+
+/**
+ * 清除无效会话并重新认证
+ */
+export const resetAuthSession = async () => {
+  console.log('[Auth Reset] Starting auth session reset...');
+  try {
+    // 先尝试获取当前会话
+    const { data: { session } } = await supabase.auth.getSession();
+    console.log('[Auth Reset] Current session:', session ? 'Present' : 'None');
+
+    if (session) {
+      // 尝试刷新令牌
+      console.log('[Auth Reset] Attempting to refresh token...');
+      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+      if (refreshError) {
+        console.error('[Auth Reset] Token refresh failed:', refreshError);
+      } else {
+        console.log('[Auth Reset] Token refresh successful');
+      }
+    }
+
+    // 清除本地存储的会话数据
+    console.log('[Auth Reset] Clearing local session data...');
+    localStorage.removeItem('supabase.auth.token');
+
+    // 重新获取会话
+    console.log('[Auth Reset] Getting fresh session...');
+    const { data: newSession } = await supabase.auth.getSession();
+    console.log('[Auth Reset] New session:', newSession.session ? 'Present' : 'None');
+
+    return { success: true, hadSession: !!session, hasSession: !!newSession.session };
+  } catch (error) {
+    console.error('[Auth Reset] Error:', error);
     return { success: false, error };
   }
 };
