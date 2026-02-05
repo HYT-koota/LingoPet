@@ -15,7 +15,7 @@ import {
 } from './services/supabaseDataService';
 import { generatePetReaction, generatePostcard, generatePetSprite } from './services/apiService';
 import { supabase } from './services/supabaseClient';
-import { Book, Search, Home, Trophy, Image as ImageIcon, User, Plane, Egg, LogOut } from 'lucide-react';
+import { Book, Search, Home, Trophy, Image as ImageIcon, User, Plane, Egg, LogOut, Sparkles } from 'lucide-react';
 
 const App: React.FC = () => {
   const [mode, setMode] = useState<AppMode>(AppMode.HOME);
@@ -28,19 +28,43 @@ const App: React.FC = () => {
   const [showPostcard, setShowPostcard] = useState<string | null>(null);
   const [showFarewell, setShowFarewell] = useState(false);
 
+  // 渲染日志 - 在主要逻辑之前
+  useEffect(() => {
+    console.log('[App] Component rendering, mode:', AppMode[mode] || mode, 'pet exists:', !!pet, 'stats exists:', !!stats);
+  });
+
   // --- 认证状态检查 ---
   useEffect(() => {
     const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setIsLoggedIn(!!session);
-      setLoading(false);
+      console.log('[App] Starting auth check...');
+
+      // 先进行认证健康检查
+      try {
+        console.log('[App] Performing auth health check...');
+        const healthStart = Date.now();
+        const { data: { session } } = await supabase.auth.getSession();
+        const healthElapsed = Date.now() - healthStart;
+        console.log(`[App] Auth health check completed in ${healthElapsed}ms, session:`, !!session);
+
+        setIsLoggedIn(!!session);
+        setLoading(false);
+      } catch (healthError) {
+        console.error('[App] Auth health check failed:', healthError);
+        setIsLoggedIn(false);
+        setLoading(false);
+        return;
+      }
 
       // 监听认证状态变化
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+        console.log('[App] Auth state changed:', event, 'session:', !!session);
         setIsLoggedIn(!!session);
         if (session) {
           // 登录后加载数据
+          console.log('[App] Session detected, loading data');
           await loadData();
+        } else {
+          console.log('[App] No session, user logged out');
         }
       });
 
@@ -52,7 +76,10 @@ const App: React.FC = () => {
 
   // --- 加载数据 ---
   const loadData = async () => {
+    console.log('[App] loadData called');
     const [loadedPet, loadedStats] = await Promise.all([getPetState(), getDailyStats()]);
+    console.log('[App] Pet loaded:', { name: loadedPet.name, stage: loadedPet.stage, xp: loadedPet.xp, imageUrls: loadedPet.imageUrls });
+    console.log('[App] Stats loaded:', loadedStats);
     setPet(loadedPet);
     setStats(loadedStats);
   };
@@ -69,18 +96,38 @@ const App: React.FC = () => {
 
     // Check if current pet stage has an image, if not, generate it
     if (!pet.imageUrls?.[pet.stage] && pet.stage !== PetStage.DEPARTED) {
+      console.log(`[Pet] Generating sprite for stage ${pet.stage}, current imageUrls:`, pet.imageUrls);
       generatePetSprite(pet.stage).then(url => {
+        console.log(`[Pet] Generated sprite URL for stage ${pet.stage}:`, url ? 'Success' : 'Failed', url?.substring(0, 50) + '...');
         if (url) {
           const newUrls = { ...pet.imageUrls, [pet.stage]: url };
           updatePet({ ...pet, imageUrls: newUrls });
         }
+      }).catch(err => {
+        console.error(`[Pet] Failed to generate sprite for stage ${pet.stage}:`, err);
       });
     }
   }, [pet?.stage, pet?.isTraveling, pet?.cycle]);
 
   // --- 登出处理 ---
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    console.log('[App] Logout button clicked');
+    try {
+      console.log('[App] Calling supabase.auth.signOut()');
+      const result = await supabase.auth.signOut();
+      console.log('[App] signOut() result:', result);
+
+      if (result.error) {
+        console.error('[App] SignOut error:', result.error);
+        alert(`登出失败: ${result.error.message}`);
+      } else {
+        console.log('[App] SignOut successful, result:', result);
+      }
+    } catch (error) {
+      console.error('[App] Unexpected error during signOut:', error);
+      alert(`登出异常: ${error}`);
+    }
+    console.log('[App] Setting isLoggedIn to false, clearing state');
     setIsLoggedIn(false);
     setPet(null);
     setStats(null);
@@ -88,15 +135,42 @@ const App: React.FC = () => {
 
   // --- Logic: Prepare Reviews ---
   const startReview = async (type: 'new' | 'due') => {
-    const allWords = await getWords();
-    const today = new Date().toISOString().split('T')[0];
+    console.log(`[Review] Starting ${type} review`);
+    try {
+      console.log('[Review] Calling getWords with timeout...');
+      const allWords = await Promise.race([
+        getWords(),
+        new Promise<WordEntry[]>((_, reject) => setTimeout(() => reject(new Error('getWords timeout after 10 seconds')), 10000))
+      ]);
+      console.log(`[Review] Total words: ${allWords.length}`);
+    const today = new Date().toLocaleDateString('en-CA');
+    console.log(`[Review] Today (local): ${today}`);
+    console.log(`[Review] Today (UTC): ${new Date().toISOString().split('T')[0]}`);
 
     let selection: WordEntry[] = [];
 
     if (type === 'new') {
+      console.log('[Review] Filtering for new words added today (local):', today);
+      console.log('[Review] All words with their dates (local/UTC):', allWords.map(w => {
+        const localDate = new Date(w.addedAt).toLocaleDateString('en-CA');
+        const utcDate = new Date(w.addedAt).toISOString().split('T')[0];
+        return {
+          word: w.word,
+          addedAt: w.addedAt,
+          localDate: localDate,
+          utcDate: utcDate,
+          isTodayLocal: localDate === today,
+          isTodayUTC: utcDate === today
+        };
+      }));
       selection = allWords.filter(w => {
-        const d = new Date(w.addedAt).toISOString().split('T')[0];
-        return d === today;
+        const localDate = new Date(w.addedAt).toLocaleDateString('en-CA');
+        const utcDate = new Date(w.addedAt).toISOString().split('T')[0];
+        const isMatchLocal = localDate === today;
+        const isMatchUTC = utcDate === today;
+        if (isMatchLocal) console.log(`[Review] Word "${w.word}" matches today (local ${localDate} === ${today})`);
+        else if (isMatchUTC) console.log(`[Review] Word "${w.word}" matches UTC date (${utcDate} === ${today})`);
+        return isMatchLocal || isMatchUTC; // Match either local or UTC date
       });
       setReviewMode('passive');
     } else {
@@ -110,17 +184,41 @@ const App: React.FC = () => {
     }
 
     if (selection.length === 0 && type === 'new') {
+      console.warn(`[Review] No new words found for today. Total words: ${allWords.length}, Today: ${today}`);
+      console.warn('[Review] All words dates (local/UTC):', allWords.map(w => ({
+        word: w.word,
+        localDate: new Date(w.addedAt).toLocaleDateString('en-CA'),
+        utcDate: new Date(w.addedAt).toISOString().split('T')[0]
+      })));
       alert("No new words added today to review. Go add some!");
       return;
     }
 
     if (selection.length === 0 && type === 'due') {
+      console.warn(`[Review] No words available for Brain Gym. Total words: ${allWords.length}`);
+      console.warn('[Review] All words review levels:', allWords.map(w => ({ word: w.word, reviewLevel: w.reviewLevel, nextReviewDate: new Date(w.nextReviewDate).toISOString() })));
       alert("No words available for Brain Gym. Search words in Dictionary first!");
       return;
     }
 
+    console.log(`[Review] Selected ${selection.length} words for ${type} review`);
+    console.log(`[Review] Words details:`, selection.map(w => ({
+      word: w.word,
+      addedAtLocal: new Date(w.addedAt).toLocaleDateString('en-CA'),
+      addedAtUTC: new Date(w.addedAt).toISOString().split('T')[0],
+      reviewLevel: w.reviewLevel,
+      nextReviewDate: new Date(w.nextReviewDate).toISOString()
+    })));
+
+    console.log('[Review] Setting reviewWords and switching to REVIEW mode');
     setReviewWords(selection);
+    console.log('[Review] reviewWords set, now setting mode to REVIEW');
     setMode(AppMode.REVIEW);
+    console.log('[Review] Mode set to REVIEW, component should re-render');
+    } catch (error) {
+      console.error('[Review] Error in startReview:', error);
+      alert(`Review failed: ${error.message}`);
+    }
   };
 
   // --- Logic: Pet Updates ---
@@ -194,11 +292,18 @@ const App: React.FC = () => {
   };
 
   const handleWordAdded = async () => {
-    if (!pet) return;
+    console.log('[App] handleWordAdded called, pet exists:', !!pet);
+    if (!pet) {
+      console.log('[App] No pet, skipping handleWordAdded');
+      return;
+    }
     const newXp = pet.xp + 10;
+    console.log('[App] Adding XP to pet:', pet.xp, '->', newXp);
     updatePet({ ...pet, xp: newXp });
     await checkPetEvolution();
-    setStats(await getDailyStats());
+    const newStats = await getDailyStats();
+    console.log('[App] Refreshing stats:', newStats);
+    setStats(newStats);
   };
 
   const handleReviewComplete = async (xp: number) => {
