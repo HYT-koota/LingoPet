@@ -217,7 +217,7 @@ const App: React.FC = () => {
     console.log('[Review] Mode set to REVIEW, component should re-render');
     } catch (error) {
       console.error('[Review] Error in startReview:', error);
-      alert(`Review failed: ${error.message}`);
+      alert(`Review failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 

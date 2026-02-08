@@ -1,10 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 
 // 从环境变量读取 Supabase 配置
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL || '';
+const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY || '';
 
-// 创建带调试的 Supabase 客户端
+// 创建可配置超时的 Supabase 客户端
+// 全局超时设置为较短时间（5秒），因为认证操作需要快速响应
+const SUPABASE_REQUEST_TIMEOUT = 5000;
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
@@ -17,7 +20,10 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     },
     fetch: (url, options) => {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const timeoutId = setTimeout(() => {
+        console.warn(`[Supabase] Request timeout after ${SUPABASE_REQUEST_TIMEOUT}ms:`, url);
+        controller.abort();
+      }, SUPABASE_REQUEST_TIMEOUT);
       return fetch(url, { ...options, signal: controller.signal })
         .finally(() => clearTimeout(timeoutId));
     }
@@ -29,13 +35,8 @@ console.log('%c Supabase 配置 %c', 'background:#3ECF8B;color:white;padding:2px
 console.log('-> URL:', supabaseUrl ? '✅ 已配置' : '❌ 未配置', supabaseUrl);
 console.log('-> Anon Key:', supabaseAnonKey ? '✅ 已配置' : '❌ 未配置');
 
-// 添加请求/响应调试拦截器
-supabase
-  .from('*')
-  .on('*', (payload) => {
-    console.log('[Supabase Debug] Event:', payload.eventType, 'Table:', payload.table, 'New:', payload.new, 'Old:', payload.old);
-  })
-  .subscribe();
+// 调试日志 - 移除无效的实时订阅
+console.log('[Supabase Client] 客户端已初始化');
 
 // 监听认证状态变化
 supabase.auth.onAuthStateChange((event, session) => {
@@ -56,7 +57,7 @@ if (typeof window !== 'undefined' && window.fetch) {
   const originalFetch = window.fetch;
   window.fetch = async function(...args) {
     const [resource, config] = args;
-    const url = typeof resource === 'string' ? resource : resource.url;
+    const url = typeof resource === 'string' ? resource : (resource as Request).url;
 
     // 只拦截 Supabase 请求
     if (url?.includes('supabase.co')) {
@@ -70,7 +71,7 @@ if (typeof window !== 'undefined' && window.fetch) {
       // 安全地解析请求体
       if (config?.body) {
         try {
-          logData.body = JSON.parse(config.body);
+          logData.body = JSON.parse(config.body as string);
         } catch {
           logData.body = '(非JSON或无法解析)';
         }

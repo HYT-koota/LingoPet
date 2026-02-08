@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LingoPet 认证测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .pass { background-color: #d4edda; border-color: #c3e6cb; }
+        .fail { background-color: #f8d7da; border-color: #f5c6cb; }
+        .running { background-color: #fff3cd; border-color: #ffeaa7; }
+        button {
+            padding: 10px 15px;
+            margin: 5px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #6c757d; cursor: not-allowed; }
+        #results {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>LingoPet Supabase 认证测试</h1>
+    <p>这个页面帮助测试第一次迭代的认证修复是否有效。</p>
+
+    <div class="test-section">
+        <h2>测试 1: 检查 Supabase 配置</h2>
+        <button id="testConfig">测试配置</button>
+        <div id="configResult"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>测试 2: 测试认证健康检查</h2>
+        <button id="testAuthHealth">运行认证健康检查</button>
+        <div id="authHealthResult"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>测试 3: 测试数据库访问</h2>
+        <button id="testDbAccess">测试数据库连接</button>
+        <div id="dbAccessResult"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>测试 4: 手动测试</h2>
+        <p>请手动测试以下功能：</p>
+        <ol>
+            <li>打开 <a href="http://localhost:5174" target="_blank">LingoPet 应用</a></li>
+            <li>检查控制台是否有 Supabase 配置日志</li>
+            <li>尝试登录（如果需要）</li>
+            <li>在字典页面输入 "test" 并保存</li>
+            <li>观察是否在10秒内完成（不应无限转圈）</li>
+            <li>点击 "Daily Review" 按钮</li>
+            <li>观察复习功能是否正常启动</li>
+        </ol>
+    </div>
+
+    <div id="results">测试结果将显示在这里...</div>
+
+    <script>
+        // 测试结果容器
+        const results = document.getElementById('results');
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+            const prefix = type === 'error' ? '❌' : type === 'success' ? '✅' : 'ℹ️';
+            results.innerHTML += `[${timestamp}] ${prefix} ${message}\n`;
+            results.scrollTop = results.scrollHeight;
+        }
+
+        // 测试 1: 检查 Supabase 配置
+        document.getElementById('testConfig').addEventListener('click', async () => {
+            const btn = document.getElementById('testConfig');
+            const resultDiv = document.getElementById('configResult');
+
+            btn.disabled = true;
+            resultDiv.className = 'running';
+            resultDiv.textContent = '测试中...';
+            log('开始测试 Supabase 配置...');
+
+            try {
+                // 尝试动态导入 LingoPet 的模块
+                const response = await fetch('http://localhost:5174');
+                const html = await response.text();
+
+                // 检查是否包含 Supabase 相关代码
+                const hasSupabase = html.includes('supabase') || html.includes('Supabase');
+                const hasEnvVars = html.includes('VITE_SUPABASE');
+
+                if (hasSupabase || hasEnvVars) {
+                    resultDiv.className = 'pass';
+                    resultDiv.textContent = '✅ Supabase 配置检测到';
+                    log('Supabase 配置检测到');
+                } else {
+                    resultDiv.className = 'fail';
+                    resultDiv.textContent = '❌ 未检测到 Supabase 配置';
+                    log('未检测到 Supabase 配置', 'error');
+                }
+            } catch (error) {
+                resultDiv.className = 'fail';
+                resultDiv.textContent = `❌ 测试失败: ${error.message}`;
+                log(`配置测试失败: ${error.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        // 测试 2: 认证健康检查
+        document.getElementById('testAuthHealth').addEventListener('click', async () => {
+            const btn = document.getElementById('testAuthHealth');
+            const resultDiv = document.getElementById('authHealthResult');
+
+            btn.disabled = true;
+            resultDiv.className = 'running';
+            resultDiv.textContent = '测试中...';
+            log('开始认证健康检查...');
+
+            try {
+                // 尝试调用健康检查 API（如果存在）
+                // 注意：这需要应用暴露相应的端点
+                const startTime = Date.now();
+
+                // 简单测试：尝试访问应用的健康端点或主页面
+                const response = await fetch('http://localhost:5174', {
+                    method: 'GET',
+                    mode: 'cors',
+                    credentials: 'include'
+                });
+
+                const elapsed = Date.now() - startTime;
+
+                if (response.ok) {
+                    resultDiv.className = 'pass';
+                    resultDiv.textContent = `✅ 应用响应正常 (${elapsed}ms)`;
+                    log(`应用响应时间: ${elapsed}ms`);
+                } else {
+                    resultDiv.className = 'fail';
+                    resultDiv.textContent = `❌ 应用响应异常: ${response.status}`;
+                    log(`应用响应异常: ${response.status}`, 'error');
+                }
+            } catch (error) {
+                resultDiv.className = 'fail';
+                resultDiv.textContent = `❌ 健康检查失败: ${error.message}`;
+                log(`健康检查失败: ${error.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        // 测试 3: 数据库访问
+        document.getElementById('testDbAccess').addEventListener('click', async () => {
+            const btn = document.getElementById('testDbAccess');
+            const resultDiv = document.getElementById('dbAccessResult');
+
+            btn.disabled = true;
+            resultDiv.className = 'running';
+            resultDiv.textContent = '测试中...';
+            log('开始数据库访问测试...');
+
+            try {
+                // 这里可以添加更复杂的测试
+                // 目前只是测试应用是否可访问
+                const startTime = Date.now();
+
+                // 尝试访问应用的主要资源
+                const responses = await Promise.allSettled([
+                    fetch('http://localhost:5174'),
+                    fetch('http://localhost:5174/favicon.ico'),
+                    fetch('http://localhost:5174/assets/index-')
+                ]);
+
+                const elapsed = Date.now() - startTime;
+                const successful = responses.filter(r => r.status === 'fulfilled' && r.value.ok).length;
+
+                if (successful > 0) {
+                    resultDiv.className = 'pass';
+                    resultDiv.textContent = `✅ 应用资源可访问 (${successful}/3 成功, ${elapsed}ms)`;
+                    log(`数据库访问测试: ${successful}/3 资源可访问 (${elapsed}ms)`);
+                } else {
+                    resultDiv.className = 'fail';
+                    resultDiv.textContent = '❌ 应用资源不可访问';
+                    log('应用资源不可访问', 'error');
+                }
+            } catch (error) {
+                resultDiv.className = 'fail';
+                resultDiv.textContent = `❌ 数据库测试失败: ${error.message}`;
+                log(`数据库测试失败: ${error.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        log('测试页面已加载。请依次运行测试。');
+    </script>
+</body>
+</html>

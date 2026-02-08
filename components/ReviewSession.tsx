@@ -18,6 +18,7 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ words, mode, onComplete }
   const [showImage, setShowImage] = useState(false);
   const [currentImage, setCurrentImage] = useState<string | null>(null);
   const [loadingImage, setLoadingImage] = useState(false);
+  const [speechAvailable, setSpeechAvailable] = useState<boolean>(true);
 
   const currentWord = sessionWords[currentIndex];
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -30,6 +31,38 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ words, mode, onComplete }
 
   useEffect(() => {
       return () => { mountedRef.current = false; };
+  }, []);
+
+  // 检查语音合成可用性
+  useEffect(() => {
+    if (!window.speechSynthesis) {
+      setSpeechAvailable(false);
+      console.warn('Speech synthesis API not available');
+      return;
+    }
+
+    // 检查是否有语音可用
+    const checkVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      if (voices.length > 0) {
+        setSpeechAvailable(true);
+      } else {
+        setSpeechAvailable(false);
+        console.warn('No speech synthesis voices available');
+      }
+    };
+
+    // 初始检查
+    checkVoices();
+
+    // 监听voiceschanged事件
+    window.speechSynthesis.onvoiceschanged = checkVoices;
+
+    return () => {
+      if (window.speechSynthesis) {
+        window.speechSynthesis.onvoiceschanged = null;
+      }
+    };
   }, []);
 
   const loadImage = (url: string): Promise<void> => {

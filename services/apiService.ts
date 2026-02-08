@@ -4,14 +4,14 @@
  */
 export const CURRENT_CONFIG = {
     // 文本 API (DeepSeek/智谱 - OpenAI 兼容)
-    textModel: process.env.TEXT_API_MODEL || 'deepseek-chat',
-    textBaseUrl: (process.env.TEXT_API_BASE_URL || 'https://api.deepseek.com').replace(/\/$/, ''),
-    hasTextKey: !!(process.env.TEXT_API_KEY && process.env.TEXT_API_KEY !== ''),
+    textModel: (import.meta as any).env.VITE_TEXT_API_MODEL || 'deepseek-chat',
+    textBaseUrl: ((import.meta as any).env.VITE_TEXT_API_BASE_URL || 'https://api.deepseek.com').replace(/\/$/, ''),
+    hasTextKey: !!((import.meta as any).env.VITE_TEXT_API_KEY && (import.meta as any).env.VITE_TEXT_API_KEY !== ''),
 
     // 图像 API (SiliconFlow - OpenAI 兼容)
-    imageModel: process.env.IMAGE_API_MODEL || 'Qwen/Qwen-Image',
-    imageBaseUrl: (process.env.IMAGE_API_BASE_URL || 'https://api.siliconflow.cn/v1').replace(/\/$/, ''),
-    hasImageKey: !!(process.env.IMAGE_API_KEY && process.env.IMAGE_API_KEY !== '')
+    imageModel: (import.meta as any).env.VITE_IMAGE_API_MODEL || 'Qwen/Qwen-Image',
+    imageBaseUrl: ((import.meta as any).env.VITE_IMAGE_API_BASE_URL || 'https://api.siliconflow.cn/v1').replace(/\/$/, ''),
+    hasImageKey: !!((import.meta as any).env.VITE_IMAGE_API_KEY && (import.meta as any).env.VITE_IMAGE_API_KEY !== '')
 };
 
 // 【重要】在浏览器控制台打印配置信息
@@ -35,9 +35,9 @@ function getPlaceholder(text: string, color: string = "#E5E7EB") {
  * OpenAI 兼容格式文本请求 (DeepSeek/智谱)
  */
 async function callOpenAITextAPI(messages: any[], jsonMode: boolean = true) {
-    const apiKey = process.env.TEXT_API_KEY;
+    const apiKey = (import.meta as any).env.VITE_TEXT_API_KEY;
 
-    if (!apiKey) throw new Error("缺少 TEXT_API_KEY，请在 Vercel 环境变量中设置");
+    if (!apiKey) throw new Error("缺少 VITE_TEXT_API_KEY，请在环境变量中设置");
 
     const url = `${CURRENT_CONFIG.textBaseUrl}/v1/chat/completions`;
 
@@ -85,8 +85,8 @@ async function callOpenAITextAPI(messages: any[], jsonMode: boolean = true) {
  * SiliconFlow/OpenAI 兼容图像生成
  */
 async function callImageAPI(prompt: string): Promise<string> {
-    const apiKey = process.env.IMAGE_API_KEY;
-    if (!apiKey) throw new Error("缺少 IMAGE_API_KEY，请在 Vercel 环境变量中设置");
+    const apiKey = (import.meta as any).env.VITE_IMAGE_API_KEY;
+    if (!apiKey) throw new Error("缺少 VITE_IMAGE_API_KEY，请在环境变量中设置");
 
     const url = `${CURRENT_CONFIG.imageBaseUrl}/images/generations`;
 
@@ -143,11 +143,16 @@ export const generateCardImage = async (word: string, context?: string, visualDe
 };
 
 export const generatePetSprite = async (stage: number): Promise<string> => {
+    console.log(`[generatePetSprite] Generating sprite for stage ${stage}`);
     const stages = ["mystical glowing egg", "cute baby creature", "teen creature", "mighty guardian character"];
     const prompt = `Cute 3D ${stages[stage]}, character design, white background, simple background, high quality, centered.`;
+    console.log(`[generatePetSprite] Prompt: ${prompt}`);
     try {
-        return await callImageAPI(prompt);
+        const url = await callImageAPI(prompt);
+        console.log(`[generatePetSprite] Successfully generated image URL: ${url?.substring(0, 80)}...`);
+        return url;
     } catch (e) {
+        console.error(`[generatePetSprite] Failed to generate image, using placeholder:`, e);
         return getPlaceholder("Pet", "#FCD34D");
     }
 };

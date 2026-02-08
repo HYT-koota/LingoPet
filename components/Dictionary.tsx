@@ -36,13 +36,24 @@ const Dictionary: React.FC<DictionaryProps> = ({ onWordAdded }) => {
 
   const handleSearch = async (searchTerm: string = input) => {
     if (!searchTerm.trim()) return;
+    console.log('[Dictionary] handleSearch called for:', searchTerm);
     setIsLoading(true);
     setResult(null);
     setAdded(false);
-    
+
     try {
-      const data = await queryDictionary(searchTerm);
-      if (data) {
+      console.log('[Dictionary] Calling queryDictionary for:', searchTerm);
+      let data;
+      try {
+        data = await queryDictionary(searchTerm);
+        console.log('[Dictionary] queryDictionary result:', data);
+      } catch (queryError) {
+        console.error('[Dictionary] queryDictionary failed:', queryError);
+        throw new Error(`词典查询失败: ${queryError instanceof Error ? queryError.message : '未知错误'}`);
+      }
+
+      if (data && data.identifiedWord) {
+        console.log('[Dictionary] Valid data received, identifiedWord:', data.identifiedWord);
         setResult(data);
         const newWord: WordEntry = {
           id: crypto.randomUUID(),
@@ -50,31 +61,54 @@ const Dictionary: React.FC<DictionaryProps> = ({ onWordAdded }) => {
           definition: data.definition,
           translation: data.translation,
           context: data.example,
-          visualDescription: data.visualDescription, 
+          visualDescription: data.visualDescription,
           addedAt: Date.now(),
           lastReviewedAt: null,
           reviewLevel: 0,
           reviewCount: 0,
-          nextReviewDate: Date.now(), 
+          nextReviewDate: Date.now(),
         };
-        saveWord(newWord);
-        
+        console.log('[Dictionary] Attempting to save word:', newWord.word, 'ID:', newWord.id, 'Full object:', JSON.stringify(newWord, null, 2));
+
+        try {
+          console.log('[Dictionary] Calling saveWord with timeout...');
+          const saveWordWithTimeout = Promise.race([
+            saveWord(newWord),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('saveWord timeout after 10 seconds')), 10000))
+          ]);
+          await saveWordWithTimeout;
+          console.log('[Dictionary] saveWord completed successfully');
+        } catch (saveError) {
+          console.error('[Dictionary] saveWord failed:', saveError);
+          throw saveError; // Re-throw to be caught by outer catch
+        }
+
         // 异步生成图片（不阻塞文本显示）
+        console.log('[Dictionary] Generating card image...');
         generateCardImage(newWord.word, newWord.context, newWord.visualDescription).then(imgUrl => {
-            updateWord(newWord.id, { 
-                todayImage: imgUrl, 
-                todayImageDate: new Date().toISOString().split('T')[0] 
+            console.log('[Dictionary] Card image generated, updating word with image URL');
+            updateWord(newWord.id, {
+                todayImage: imgUrl,
+                todayImageDate: new Date().toISOString().split('T')[0]
             });
+        }).catch(imgError => {
+          console.error('[Dictionary] Failed to generate card image:', imgError);
         });
 
-        const currentStats = getDailyStats();
-        updateDailyStats({ wordsAdded: (currentStats.wordsAdded || 0) + 1 });
-        
+        console.log('[Dictionary] Updating daily stats...');
+        const currentStats = await getDailyStats();
+        console.log('[Dictionary] Current stats:', currentStats);
+        await updateDailyStats({ wordsAdded: (currentStats.wordsAdded || 0) + 1 });
+
         setAdded(true);
+        console.log('[Dictionary] Calling onWordAdded callback');
         onWordAdded();
+        console.log('[Dictionary] Word added process completed');
+      } else {
+        console.warn('[Dictionary] queryDictionary returned null/undefined data');
       }
     } catch (error: any) {
-      console.error("Dictionary error", error);
+      console.error("[Dictionary] Overall error", error);
       alert(error.message || "请求失败，请检查网络或 API 配置");
     } finally {
       setIsLoading(false);

@@ -50,11 +50,11 @@ const PetNode: React.FC<PetNodeProps> = ({ pet, onClick }) => {
         
         <div className="w-full h-full flex items-center justify-center">
             {imageUrl ? (
-                // Use mix-blend-multiply to remove white background from the generated image
-                <img 
-                    src={imageUrl} 
-                    alt={pet.name} 
-                    className="w-full h-full object-contain animate-float mix-blend-multiply drop-shadow-lg"
+                // Use mix-blend-multiply to remove white background from the generated image, but not for placeholder SVGs
+                <img
+                    src={imageUrl}
+                    alt={pet.name}
+                    className={`w-full h-full object-contain animate-float drop-shadow-lg ${imageUrl.startsWith('data:image/svg+xml') ? '' : 'mix-blend-multiply'}`}
                 />
             ) : (
                 <div className="w-24 h-24 bg-brand-100 rounded-full flex items-center justify-center animate-pulse shadow-inner">

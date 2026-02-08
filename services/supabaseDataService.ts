@@ -4,22 +4,20 @@ import { PetState, PetStage, WordEntry, DailyStats } from '../types';
 // ========== 认证辅助函数 ==========
 /**
  * 带重试的 getUser 包装器
+ * 全局 fetch 超时已设置为 5 秒，这里不需要额外的 Promise.race
+ * 主要是处理认证失败后的重试逻辑
  */
 const getUserWithRetry = async (maxRetries = 2): Promise<{ data: { user: any } }> => {
   for (let i = 0; i < maxRetries; i++) {
+    let startTime: number | undefined;
     try {
       console.log(`[Auth Retry] Attempt ${i + 1}/${maxRetries} calling supabase.auth.getUser()`);
-      const startTime = Date.now();
+      startTime = Date.now();
 
-      // 添加超时保护
-      const result = await Promise.race([
-        supabase.auth.getUser(),
-        new Promise<{ data: { user: any } }>((_, reject) =>
-          setTimeout(() => reject(new Error(`getUser timeout after 5000ms on attempt ${i + 1}`)), 5000)
-        )
-      ]);
+      // 直接调用 getUser，全局 fetch 超时会在 5 秒后中止请求
+      const result = await supabase.auth.getUser();
 
-      const elapsed = Date.now() - startTime;
+      const elapsed = Date.now() - startTime!;
       console.log(`[Auth Retry] Attempt ${i + 1} completed in ${elapsed}ms, user:`, result.data.user ? '✅ Present' : '❌ None');
 
       if (result.data.user) return result;
@@ -30,7 +28,8 @@ const getUserWithRetry = async (maxRetries = 2): Promise<{ data: { user: any } }
         await new Promise(r => setTimeout(r, delay));
       }
     } catch (error) {
-      console.error(`[Auth Retry] Attempt ${i + 1} failed:`, error);
+      const elapsed = startTime !== undefined ? Date.now() - startTime : 0;
+      console.error(`[Auth Retry] Attempt ${i + 1} failed ${startTime !== undefined ? `after ${elapsed}ms` : '(startTime not set)'}:`, error);
       if (i === maxRetries - 1) throw error;
     }
   }
