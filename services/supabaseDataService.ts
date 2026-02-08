@@ -15,7 +15,11 @@ const getUserWithRetry = async (maxRetries = 2): Promise<{ data: { user: any } }
       startTime = Date.now();
 
       // 直接调用 getUser，全局 fetch 超时会在 5 秒后中止请求
-      const result = await supabase.auth.getUser();
+      // 添加额外超时保护（3秒），防止无限等待
+      const result = await Promise.race([
+        supabase.auth.getUser(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('auth.getUser() timeout after 3000ms')), 3000))
+      ]);
 
       const elapsed = Date.now() - startTime!;
       console.log(`[Auth Retry] Attempt ${i + 1} completed in ${elapsed}ms, user:`, result.data.user ? '✅ Present' : '❌ None');
