@@ -166,7 +166,19 @@ export const getWords = async (): Promise<WordEntry[]> => {
     query = query.eq('user_id', userId);
   }
 
-  const { data, error } = await query;
+  // 添加数据库查询超时保护（5秒）
+  let data, error;
+  try {
+    const queryResult = await Promise.race([
+      query,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Database query timeout after 5000ms')), 5000))
+    ]);
+    data = queryResult.data;
+    error = queryResult.error;
+  } catch (queryError) {
+    console.error('[getWords] Database query failed with timeout:', queryError);
+    throw new Error(`Database query failed: ${queryError instanceof Error ? queryError.message : 'Unknown error'}`);
+  }
 
   if (error) {
     console.error('[getWords] Error fetching words:', error);
@@ -226,12 +238,23 @@ export const saveWord = async (newWord: WordEntry) => {
   };
 
   // 检查是否已存在（基于user_id和word）
-  const { data: existing, error: checkError } = await supabase
-    .from('words')
-    .select('id')
-    .eq('user_id', userId)
-    .ilike('word', newWord.word.toLowerCase())
-    .maybeSingle();
+  let existing, checkError;
+  try {
+    const checkResult = await Promise.race([
+      supabase
+        .from('words')
+        .select('id')
+        .eq('user_id', userId)
+        .ilike('word', newWord.word.toLowerCase())
+        .maybeSingle(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Check existing word query timeout after 5000ms')), 5000))
+    ]);
+    existing = checkResult.data;
+    checkError = checkResult.error;
+  } catch (checkQueryError) {
+    console.error('[saveWord] Check existing word query failed:', checkQueryError);
+    throw new Error(`Check existing word failed: ${checkQueryError instanceof Error ? checkQueryError.message : 'Unknown error'}`);
+  }
 
   if (checkError) {
     console.error('[saveWord] Error checking existing word:', checkError);
@@ -241,26 +264,46 @@ export const saveWord = async (newWord: WordEntry) => {
   if (existing) {
     // 更新现有单词
     console.log('[saveWord] Updating existing word:', existing.id);
-    const { error } = await supabase
-      .from('words')
-      .update(wordData)
-      .eq('id', existing.id);
+    let updateError;
+    try {
+      const updateResult = await Promise.race([
+        supabase
+          .from('words')
+          .update(wordData)
+          .eq('id', existing.id),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Update word query timeout after 5000ms')), 5000))
+      ]);
+      updateError = updateResult.error;
+    } catch (updateQueryError) {
+      console.error('[saveWord] Update word query failed:', updateQueryError);
+      throw new Error(`Update word failed: ${updateQueryError instanceof Error ? updateQueryError.message : 'Unknown error'}`);
+    }
 
-    if (error) {
-      console.error('[saveWord] Error updating word:', error);
-      throw error;
+    if (updateError) {
+      console.error('[saveWord] Error updating word:', updateError);
+      throw updateError;
     }
     console.log('[saveWord] Word updated successfully');
   } else {
     // 插入新单词
     console.log('[saveWord] Inserting new word with ID:', newWord.id);
-    const { error } = await supabase
-      .from('words')
-      .insert([{ ...wordData, id: newWord.id }]);
+    let insertError;
+    try {
+      const insertResult = await Promise.race([
+        supabase
+          .from('words')
+          .insert([{ ...wordData, id: newWord.id }]),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Insert word query timeout after 5000ms')), 5000))
+      ]);
+      insertError = insertResult.error;
+    } catch (insertQueryError) {
+      console.error('[saveWord] Insert word query failed:', insertQueryError);
+      throw new Error(`Insert word failed: ${insertQueryError instanceof Error ? insertQueryError.message : 'Unknown error'}`);
+    }
 
-    if (error) {
-      console.error('[saveWord] Error inserting word:', error);
-      throw error;
+    if (insertError) {
+      console.error('[saveWord] Error inserting word:', insertError);
+      throw insertError;
     }
     console.log('[saveWord] Word inserted successfully');
   }
