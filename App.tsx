@@ -562,7 +562,7 @@ const App: React.FC = () => {
 
         {mode === AppMode.PET_PROFILE && (
           <div className="h-full min-h-0 flex flex-col animate-pop">
-            <PetProfile pet={pet} onOpenNotebook={() => setMode(AppMode.NOTEBOOK)} onLogout={handleLogout} />
+            <PetProfile pet={pet} onOpenNotebook={() => setMode(AppMode.NOTEBOOK)} />
           </div>
         )}
 

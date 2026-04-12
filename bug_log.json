@@ -123,7 +123,7 @@
     {
       "id": "BUG-20260412-4",
       "title": "Profile 页面缺少登录/登出入口",
-      "status": "confirmed",
+      "status": "resolved",
       "priority": "medium",
       "description": "用户反馈在 Profile 页面没看到登录和登出按钮。",
       "reproduce_steps": [
@@ -131,7 +131,7 @@
         "检查账号操作入口"
       ],
       "created_at": "2026-04-12 14:40",
-      "updated_at": "2026-04-12 15:49",
+      "updated_at": "2026-04-12 16:01",
       "history": [
         {
           "timestamp": "2026-04-12 15:48",
@@ -156,6 +156,24 @@
           "role": "System",
           "action": "status_update",
           "detail": "Status changed from in_progress to confirmed"
+        },
+        {
+          "timestamp": "2026-04-12 16:00",
+          "role": "User",
+          "action": "feedback",
+          "detail": "用户反馈：Profile 新增的两个按钮多余，要求恢复为仅保留原右上角入口。"
+        },
+        {
+          "timestamp": "2026-04-12 16:01",
+          "role": "AI",
+          "action": "implementation",
+          "detail": "已按用户要求移除 Profile 页新增的两个按钮，恢复仅使用原右上角入口。"
+        },
+        {
+          "timestamp": "2026-04-12 16:01",
+          "role": "System",
+          "action": "status_update",
+          "detail": "Status changed from confirmed to resolved"
         }
       ]
     }
