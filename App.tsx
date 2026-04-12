@@ -473,7 +473,7 @@ const App: React.FC = () => {
       )}
 
       {/* Main Viewport */}
-      <main className="flex-1 min-h-0 overflow-hidden relative flex flex-col">
+      <main className="flex-1 min-h-0 overflow-x-hidden relative flex flex-col">
         {mode === AppMode.HOME && (
           <div className="flex flex-col h-full min-h-0 p-6 overflow-y-auto app-main-scroll animate-pop z-10">
 
@@ -536,7 +536,7 @@ const App: React.FC = () => {
 
         {mode === AppMode.PET_PROFILE && (
           <div className="h-full min-h-0 flex flex-col animate-pop">
-            <PetProfile pet={pet} onOpenNotebook={() => setMode(AppMode.NOTEBOOK)} />
+            <PetProfile pet={pet} onOpenNotebook={() => setMode(AppMode.NOTEBOOK)} onLogout={handleLogout} />
           </div>
         )}
 
@@ -561,7 +561,7 @@ const App: React.FC = () => {
 
       {/* Bottom Navigation Dock (Hidden in Notebook/Review for immersion) */}
       {mode !== AppMode.NOTEBOOK && mode !== AppMode.REVIEW && (
-        <nav className="bg-white border-t border-gray-100 px-6 py-3 flex justify-around items-center pb-safe shadow-[0_-4px_20px_rgba(0,0,0,0.03)] z-30">
+        <nav className="bg-white border-t border-gray-100 px-6 py-3 flex justify-around items-center pb-nav-safe shadow-[0_-4px_20px_rgba(0,0,0,0.03)] z-30">
           <button
             onClick={() => setMode(AppMode.HOME)}
             className={`flex flex-col items-center gap-1 p-2 rounded-2xl transition-all ${mode === AppMode.HOME ? 'text-brand-600 bg-brand-50' : 'text-gray-400 hover:text-brand-400'}`}

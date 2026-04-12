@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PetState } from '../types';
 import { Heart, Zap, Star, Loader2 } from 'lucide-react';
 
@@ -11,6 +11,9 @@ interface PetNodeProps {
 
 const PetNode: React.FC<PetNodeProps> = ({ pet, onClick, onImageError }) => {
   const [isPetted, setIsPetted] = useState(false);
+  const [displayImageUrl, setDisplayImageUrl] = useState<string | null>(null);
+  const [imageLoading, setImageLoading] = useState(true);
+  const failedUrlRef = useRef<string | null>(null);
 
   const handlePet = () => {
     setIsPetted(true);
@@ -19,6 +22,60 @@ const PetNode: React.FC<PetNodeProps> = ({ pet, onClick, onImageError }) => {
   };
   
   const imageUrl = pet.imageUrls?.[pet.stage];
+  const placeholderImage = useMemo(
+    () =>
+      `data:image/svg+xml;base64,${btoa(
+        `<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg"><rect width="512" height="512" fill="#F9FAFB"/><rect x="156" y="156" width="200" height="200" rx="40" fill="#FCD34D" opacity="0.2"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="20" fill="#D97706">${pet.name}</text></svg>`
+      )}`,
+    [pet.name]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!imageUrl) {
+      setDisplayImageUrl(placeholderImage);
+      setImageLoading(false);
+      return;
+    }
+
+    setImageLoading(true);
+    const img = new Image();
+    const timeoutId = window.setTimeout(() => {
+      if (cancelled) return;
+      setDisplayImageUrl(placeholderImage);
+      setImageLoading(false);
+      if (!imageUrl.startsWith('data:image/svg+xml;base64,') && failedUrlRef.current !== imageUrl) {
+        failedUrlRef.current = imageUrl;
+        onImageError?.(pet.stage, imageUrl);
+      }
+    }, 6000);
+
+    img.onload = () => {
+      if (cancelled) return;
+      window.clearTimeout(timeoutId);
+      setDisplayImageUrl(imageUrl);
+      setImageLoading(false);
+    };
+
+    img.onerror = () => {
+      if (cancelled) return;
+      window.clearTimeout(timeoutId);
+      setDisplayImageUrl(placeholderImage);
+      setImageLoading(false);
+      if (!imageUrl.startsWith('data:image/svg+xml;base64,') && failedUrlRef.current !== imageUrl) {
+        failedUrlRef.current = imageUrl;
+        onImageError?.(pet.stage, imageUrl);
+      }
+    };
+
+    img.src = imageUrl;
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [imageUrl, onImageError, pet.stage, placeholderImage]);
   
   return (
     <div className="w-full flex items-center justify-between p-4 relative" onClick={handlePet}>
@@ -50,12 +107,15 @@ const PetNode: React.FC<PetNodeProps> = ({ pet, onClick, onImageError }) => {
         )}
         
         <div className="w-full h-full flex items-center justify-center">
-            {imageUrl ? (
+            {imageLoading ? (
+                <div className="w-24 h-24 bg-brand-100 rounded-full flex items-center justify-center animate-pulse shadow-inner">
+                    <Loader2 className="w-8 h-8 text-brand-400 animate-spin" />
+                </div>
+            ) : displayImageUrl ? (
                 <img
-                    src={imageUrl}
+                    src={displayImageUrl}
                     alt={pet.name}
                     className="w-full h-full object-contain animate-float drop-shadow-lg"
-                    onError={() => onImageError?.(pet.stage, imageUrl)}
                 />
             ) : (
                 <div className="w-24 h-24 bg-brand-100 rounded-full flex items-center justify-center animate-pulse shadow-inner">

@@ -20,6 +20,14 @@ function getPlaceholder(text: string, color: string = '#E5E7EB') {
   return `data:image/svg+xml;base64,${btoa(svg)}`;
 }
 
+function normalizeImageUrl(rawUrl: string): string {
+  const trimmed = rawUrl.trim();
+  if (trimmed.startsWith('http://')) {
+    return `https://${trimmed.slice('http://'.length)}`;
+  }
+  return trimmed;
+}
+
 async function callOpenAITextAPI(messages: any[], jsonMode: boolean = true) {
   const apiKey = (import.meta as any).env.VITE_TEXT_API_KEY;
   if (!apiKey) throw new Error('Missing VITE_TEXT_API_KEY');
@@ -119,7 +127,7 @@ async function callImageAPI(prompt: string): Promise<string> {
   if (!imageUrl) {
     throw new Error('Image API returned no URL');
   }
-  return imageUrl;
+  return normalizeImageUrl(imageUrl);
 }
 
 export const queryDictionary = async (userInput: string) => {
