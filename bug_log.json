@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "current_bug_id": "BUG-20260412-2",
+  "current_bug_id": "BUG-20260412-6",
   "bugs": [
     {
       "id": "BUG-20260412-1",
@@ -102,7 +102,7 @@
         "出现无图或加载失败"
       ],
       "created_at": "2026-04-12 14:40",
-      "updated_at": "2026-04-12 17:29",
+      "updated_at": "2026-04-12 17:41",
       "history": [
         {
           "timestamp": "2026-04-12 17:06",
@@ -157,6 +157,12 @@
           "role": "System",
           "action": "test_result",
           "detail": "本地 npm run build 再次通过（含新 api/text.ts、api/image.ts 服务端中转改造）。"
+        },
+        {
+          "timestamp": "2026-04-12 17:41",
+          "role": "System",
+          "action": "context_switch",
+          "detail": "Switched away to BUG-20260412-6"
         }
       ]
     },
@@ -311,6 +317,54 @@
           "role": "System",
           "action": "context_switch",
           "detail": "Switched away to BUG-20260412-2"
+        }
+      ]
+    },
+    {
+      "id": "BUG-20260412-6",
+      "title": "saveWord 10秒超时与 auth.getUser 超时",
+      "status": "in_progress",
+      "priority": "high",
+      "description": "用户在新增单词时出现 saveWord timeout after 10 seconds，同时控制台出现 auth.getUser timeout after 10000ms。",
+      "reproduce_steps": [],
+      "created_at": "2026-04-12 17:41",
+      "updated_at": "2026-04-12 17:47",
+      "history": [
+        {
+          "timestamp": "2026-04-12 17:41",
+          "role": "User",
+          "action": "reported",
+          "detail": "用户在新增单词时出现 saveWord timeout after 10 seconds，同时控制台出现 auth.getUser timeout after 10000ms。"
+        },
+        {
+          "timestamp": "2026-04-12 17:41",
+          "role": "System",
+          "action": "status_update",
+          "detail": "Status changed from open to in_progress"
+        },
+        {
+          "timestamp": "2026-04-12 17:41",
+          "role": "System",
+          "action": "context_switch",
+          "detail": "Set as current bug"
+        },
+        {
+          "timestamp": "2026-04-12 17:47",
+          "role": "AI",
+          "action": "implementation",
+          "detail": "已移除 Dictionary 中 saveWord 的 10 秒外层 Promise.race 超时；并将 getUserWithRetry 超时从 10 秒提高到 15 秒，且优先使用 getSession 缓存用户。"
+        },
+        {
+          "timestamp": "2026-04-12 17:47",
+          "role": "AI",
+          "action": "implementation",
+          "detail": "已将 Supabase 全局 fetch 超时改为按路由区分：auth 请求 12 秒、其他请求 5 秒，降低认证链路误超时。"
+        },
+        {
+          "timestamp": "2026-04-12 17:47",
+          "role": "System",
+          "action": "test_result",
+          "detail": "本地 npm run build 通过（新构建产物 index-DSy2y0AN.js）。"
         }
       ]
     }

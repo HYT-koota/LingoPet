@@ -10,7 +10,8 @@ export const SUPABASE_CONFIG = {
   isConfigured: Boolean(supabaseUrl && supabaseAnonKey),
 };
 
-const SUPABASE_REQUEST_TIMEOUT = 5000;
+const DEFAULT_SUPABASE_REQUEST_TIMEOUT = 5000;
+const AUTH_SUPABASE_REQUEST_TIMEOUT = 12000;
 
 // Avoid hard crash when env vars are missing, and let UI show a clear config error state.
 const safeSupabaseUrl = SUPABASE_CONFIG.isConfigured ? supabaseUrl : 'https://placeholder.supabase.co';
@@ -27,11 +28,13 @@ export const supabase = createClient(safeSupabaseUrl, safeSupabaseAnonKey, {
       'X-Client-Info': 'lingopet-web',
     },
     fetch: (url, options) => {
+      const urlString = typeof url === 'string' ? url : String(url);
+      const timeoutMs = urlString.includes('/auth/v1/') ? AUTH_SUPABASE_REQUEST_TIMEOUT : DEFAULT_SUPABASE_REQUEST_TIMEOUT;
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
-        console.warn(`[Supabase] Request timeout after ${SUPABASE_REQUEST_TIMEOUT}ms:`, url);
+        console.warn(`[Supabase] Request timeout after ${timeoutMs}ms:`, url);
         controller.abort();
-      }, SUPABASE_REQUEST_TIMEOUT);
+      }, timeoutMs);
 
       return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timeoutId));
     },
@@ -47,4 +50,3 @@ if (!SUPABASE_CONFIG.isConfigured) {
     '[Supabase] Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY. App will show config error page until env vars are set.'
   );
 }
-

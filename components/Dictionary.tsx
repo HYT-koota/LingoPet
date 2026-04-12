@@ -71,12 +71,8 @@ const Dictionary: React.FC<DictionaryProps> = ({ onWordAdded }) => {
         console.log('[Dictionary] Attempting to save word:', newWord.word, 'ID:', newWord.id, 'Full object:', JSON.stringify(newWord, null, 2));
 
         try {
-          console.log('[Dictionary] Calling saveWord with timeout...');
-          const saveWordWithTimeout = Promise.race([
-            saveWord(newWord),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('saveWord timeout after 10 seconds')), 10000))
-          ]);
-          await saveWordWithTimeout;
+          console.log('[Dictionary] Calling saveWord...');
+          await saveWord(newWord);
           console.log('[Dictionary] saveWord completed successfully');
         } catch (saveError) {
           console.error('[Dictionary] saveWord failed:', saveError);

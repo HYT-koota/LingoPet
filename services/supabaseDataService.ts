@@ -26,8 +26,13 @@ const getUserFromSessionFallback = async (): Promise<any | null> => {
 };
 
 const getUserWithRetry = async (maxRetries = 3): Promise<{ data: { user: any } }> => {
-  const AUTH_TIMEOUT_MS = 10000; // 认证超时：10秒
+  const AUTH_TIMEOUT_MS = 15000; // 认证超时：15秒
   const BASE_DELAY_MS = 1000; // 基础延迟1秒
+  const cachedUser = await getUserFromSessionFallback();
+  if (cachedUser) {
+    console.log('[Auth Retry] Using cached session user before network retry');
+    return { data: { user: cachedUser } };
+  }
 
   for (let i = 0; i < maxRetries; i++) {
     let startTime: number | undefined;
