@@ -1,0 +1,102 @@
+{
+  "version": 1,
+  "current_bug_id": "BUG-20260412-1",
+  "bugs": [
+    {
+      "id": "BUG-20260412-1",
+      "title": "Preview 环境打不开（401）",
+      "status": "in_progress",
+      "priority": "high",
+      "description": "用户反馈预览网址无法打开。命令复测预览域名返回 401，生产域名返回 200。",
+      "reproduce_steps": [
+        "打开 preview 域名",
+        "页面无法进入",
+        "控制台可能出现 /api/v6/deployments/.../turborepo-summary 404"
+      ],
+      "created_at": "2026-04-12 14:40",
+      "updated_at": "2026-04-12 14:49",
+      "history": [
+        {
+          "timestamp": "2026-04-12 14:40",
+          "role": "User",
+          "action": "feedback",
+          "detail": "已在 Project Settings -> Deployment Protection -> Vercel Authentication (Preview) 设为关闭。"
+        },
+        {
+          "timestamp": "2026-04-12 14:37",
+          "role": "System",
+          "action": "test_result",
+          "detail": "已触发新部署（commit f94a555）后复测分支别名域名，仍返回 401。"
+        },
+        {
+          "timestamp": "2026-04-12 14:42",
+          "role": "User",
+          "action": "feedback",
+          "detail": "用户确认 Project Settings 下相关保护都已关闭，并询问关闭 Vercel Authentication 的含义。"
+        },
+        {
+          "timestamp": "2026-04-12 14:44",
+          "role": "AI",
+          "action": "suggested_fix",
+          "detail": "解释给用户：关闭 Preview Vercel Authentication 意味着预览链接可匿名访问，不再要求 Vercel 登录。若仍 401，需排查 Team 级安全策略或网络层拦截。"
+        },
+        {
+          "timestamp": "2026-04-12 14:46",
+          "role": "User",
+          "action": "feedback",
+          "detail": "用户提供新报错：Uncaught Error: supabaseUrl is required。"
+        },
+        {
+          "timestamp": "2026-04-12 14:49",
+          "role": "AI",
+          "action": "implementation",
+          "detail": "已修改 supabaseClient.ts + App.tsx：当 VITE_SUPABASE_URL/VITE_SUPABASE_ANON_KEY 缺失时不再 runtime crash，而是显示明确配置页。"
+        }
+      ]
+    },
+    {
+      "id": "BUG-20260412-2",
+      "title": "宠物图片在电脑端/手机端加载失败",
+      "status": "open",
+      "priority": "high",
+      "description": "用户已登录，但宠物图片看不到；Daily Review 图片可加载。",
+      "reproduce_steps": [
+        "登录应用",
+        "进入 Home 查看宠物图",
+        "出现无图或加载失败"
+      ],
+      "created_at": "2026-04-12 14:40",
+      "updated_at": "2026-04-12 14:40",
+      "history": []
+    },
+    {
+      "id": "BUG-20260412-3",
+      "title": "移动端底部导航过低且页面滚动异常",
+      "status": "open",
+      "priority": "high",
+      "description": "iPhone Safari 底部三个按钮太靠下难以点击，页面上下滑动体验异常。",
+      "reproduce_steps": [
+        "iPhone Safari 打开网页",
+        "尝试点击底部三个按钮",
+        "尝试上下滑动页面"
+      ],
+      "created_at": "2026-04-12 14:40",
+      "updated_at": "2026-04-12 14:40",
+      "history": []
+    },
+    {
+      "id": "BUG-20260412-4",
+      "title": "Profile 页面缺少登录/登出入口",
+      "status": "open",
+      "priority": "medium",
+      "description": "用户反馈在 Profile 页面没看到登录和登出按钮。",
+      "reproduce_steps": [
+        "进入 Profile 页面",
+        "检查账号操作入口"
+      ],
+      "created_at": "2026-04-12 14:40",
+      "updated_at": "2026-04-12 14:40",
+      "history": []
+    }
+  ]
+}

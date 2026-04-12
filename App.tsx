@@ -14,7 +14,7 @@ import {
   updateDailyStats
 } from './services/supabaseDataService';
 import { generatePetReaction, generatePostcard, generatePetSprite } from './services/apiService';
-import { supabase } from './services/supabaseClient';
+import { supabase, SUPABASE_CONFIG } from './services/supabaseClient';
 import { Book, Search, Home, Trophy, Image as ImageIcon, User, Plane, Egg, LogOut, Sparkles } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -42,6 +42,12 @@ const App: React.FC = () => {
   useEffect(() => {
     const checkAuth = async () => {
       console.log('[App] Starting auth check...');
+      if (!SUPABASE_CONFIG.isConfigured) {
+        console.error('[App] Supabase env vars missing. Skip auth bootstrap.');
+        setIsLoggedIn(false);
+        setLoading(false);
+        return;
+      }
 
       // 先进行认证健康检查
       try {
@@ -421,6 +427,26 @@ const App: React.FC = () => {
   }
 
   // --- 登录页面 ---
+  if (!SUPABASE_CONFIG.isConfigured) {
+    return (
+      <div className="h-full w-full flex items-center justify-center bg-brand-50 px-6">
+        <div className="max-w-lg w-full bg-white border border-brand-100 rounded-3xl shadow-sm p-6">
+          <h2 className="text-xl font-extrabold text-brand-700 mb-3">Missing Supabase Config</h2>
+          <p className="text-sm text-gray-700 mb-3">
+            This deployment is missing required environment variables.
+          </p>
+          <ul className="text-sm text-gray-600 list-disc pl-5 space-y-1">
+            <li>`VITE_SUPABASE_URL`</li>
+            <li>`VITE_SUPABASE_ANON_KEY`</li>
+          </ul>
+          <p className="text-xs text-gray-500 mt-4">
+            In Vercel, add these for both Preview and Production, then redeploy.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (!isLoggedIn) {
     return <Login onLoginSuccess={() => setIsLoggedIn(true)} />;
   }
