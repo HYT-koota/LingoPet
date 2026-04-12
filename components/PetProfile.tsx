@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { PetState, PetStage } from '../types';
-import { Trophy, BookOpen, MapPin, Star, Activity, ChevronRight, LogOut } from 'lucide-react';
+import { Trophy, BookOpen, MapPin, Star, Activity, ChevronRight, LogOut, LogIn } from 'lucide-react';
 import { CURRENT_CONFIG } from '../services/apiService';
 import { getWords } from '../services/supabaseDataService';
 
@@ -96,6 +96,24 @@ const PetProfile: React.FC<PetProfileProps> = ({ pet, onOpenNotebook, onLogout }
               </div>
           </div>
           <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 group-hover:bg-red-100 group-hover:text-red-600 transition-colors">
+              <ChevronRight size={20} />
+          </div>
+       </button>
+
+       <button
+         onClick={onLogout}
+         className="w-full bg-white p-5 rounded-3xl shadow-sm border border-brand-100 mb-6 flex justify-between items-center group hover:bg-brand-50 transition-colors"
+       >
+          <div className="flex items-center gap-4">
+              <div className="bg-brand-50 text-brand-600 w-12 h-12 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <LogIn size={22} />
+              </div>
+              <div className="text-left">
+                  <h3 className="text-lg font-bold text-gray-800 group-hover:text-brand-700 transition-colors">Go to Login</h3>
+                  <p className="text-sm text-gray-500">Sign in with another account</p>
+              </div>
+          </div>
+          <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 group-hover:bg-brand-100 group-hover:text-brand-700 transition-colors">
               <ChevronRight size={20} />
           </div>
        </button>

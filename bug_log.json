@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "current_bug_id": "BUG-20260412-1",
+  "current_bug_id": "BUG-20260412-4",
   "bugs": [
     {
       "id": "BUG-20260412-1",
@@ -14,7 +14,7 @@
         "控制台可能出现 /api/v6/deployments/.../turborepo-summary 404"
       ],
       "created_at": "2026-04-12 14:40",
-      "updated_at": "2026-04-12 14:49",
+      "updated_at": "2026-04-12 15:48",
       "history": [
         {
           "timestamp": "2026-04-12 14:40",
@@ -51,6 +51,42 @@
           "role": "AI",
           "action": "implementation",
           "detail": "已修改 supabaseClient.ts + App.tsx：当 VITE_SUPABASE_URL/VITE_SUPABASE_ANON_KEY 缺失时不再 runtime crash，而是显示明确配置页。"
+        },
+        {
+          "timestamp": "2026-04-12 14:58",
+          "role": "User",
+          "action": "feedback",
+          "detail": "用户担心环境变量被代码改动删除，询问是否由本次修复导致。"
+        },
+        {
+          "timestamp": "2026-04-12 14:58",
+          "role": "AI",
+          "action": "suggested_fix",
+          "detail": "确认：本轮提交仅改动 App.tsx、supabaseClient.ts、bug_log.json，不包含任何 Vercel 环境变量写入操作；且本机无 vercel CLI，未执行 env add/rm。"
+        },
+        {
+          "timestamp": "2026-04-12 15:06",
+          "role": "System",
+          "action": "status_update",
+          "detail": "Status changed from in_progress to in_progress"
+        },
+        {
+          "timestamp": "2026-04-12 15:26",
+          "role": "User",
+          "action": "feedback",
+          "detail": "用户询问：之前跑通时未在代码里写变量，系统如何识别。"
+        },
+        {
+          "timestamp": "2026-04-12 15:27",
+          "role": "AI",
+          "action": "suggested_fix",
+          "detail": "解释：代码改动无法删除 Vercel 控制台变量。历史可用通常来自：1) 变量仅存在于某个环境（如 Production）；2) 旧部署在变量存在时构建，后续新部署环境变化；3) 本地 .env.local 有值而线上没有。"
+        },
+        {
+          "timestamp": "2026-04-12 15:48",
+          "role": "System",
+          "action": "context_switch",
+          "detail": "Switched away to BUG-20260412-4"
         }
       ]
     },
@@ -87,7 +123,7 @@
     {
       "id": "BUG-20260412-4",
       "title": "Profile 页面缺少登录/登出入口",
-      "status": "open",
+      "status": "confirmed",
       "priority": "medium",
       "description": "用户反馈在 Profile 页面没看到登录和登出按钮。",
       "reproduce_steps": [
@@ -95,8 +131,33 @@
         "检查账号操作入口"
       ],
       "created_at": "2026-04-12 14:40",
-      "updated_at": "2026-04-12 14:40",
-      "history": []
+      "updated_at": "2026-04-12 15:49",
+      "history": [
+        {
+          "timestamp": "2026-04-12 15:48",
+          "role": "System",
+          "action": "context_switch",
+          "detail": "Set as current bug"
+        },
+        {
+          "timestamp": "2026-04-12 15:48",
+          "role": "System",
+          "action": "status_update",
+          "detail": "Status changed from open to in_progress"
+        },
+        {
+          "timestamp": "2026-04-12 15:49",
+          "role": "AI",
+          "action": "implementation",
+          "detail": "在 Profile 页面新增明确的两个账号入口：Log Out 和 Go to Login（切换账号），二者都可进入登录流程。"
+        },
+        {
+          "timestamp": "2026-04-12 15:49",
+          "role": "System",
+          "action": "status_update",
+          "detail": "Status changed from in_progress to confirmed"
+        }
+      ]
     }
   ]
 }
