@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "current_bug_id": "BUG-20260412-5",
+  "current_bug_id": "BUG-20260412-2",
   "bugs": [
     {
       "id": "BUG-20260412-1",
@@ -93,7 +93,7 @@
     {
       "id": "BUG-20260412-2",
       "title": "宠物图片在电脑端/手机端加载失败",
-      "status": "open",
+      "status": "in_progress",
       "priority": "high",
       "description": "用户已登录，但宠物图片看不到；Daily Review 图片可加载。",
       "reproduce_steps": [
@@ -102,8 +102,63 @@
         "出现无图或加载失败"
       ],
       "created_at": "2026-04-12 14:40",
-      "updated_at": "2026-04-12 14:40",
-      "history": []
+      "updated_at": "2026-04-12 17:29",
+      "history": [
+        {
+          "timestamp": "2026-04-12 17:06",
+          "role": "System",
+          "action": "status_update",
+          "detail": "Status changed from open to in_progress"
+        },
+        {
+          "timestamp": "2026-04-12 17:06",
+          "role": "System",
+          "action": "context_switch",
+          "detail": "Set as current bug"
+        },
+        {
+          "timestamp": "2026-04-12 17:06",
+          "role": "User",
+          "action": "feedback",
+          "detail": "新日志显示宠物图失败根因：Missing VITE_IMAGE_API_KEY（Preview 部署）。"
+        },
+        {
+          "timestamp": "2026-04-12 17:06",
+          "role": "System",
+          "action": "status_update",
+          "detail": "Status changed from in_progress to blocked"
+        },
+        {
+          "timestamp": "2026-04-12 17:06",
+          "role": "AI",
+          "action": "suggested_fix",
+          "detail": "当前阻塞在部署环境变量：需在 Vercel 为 Preview/Production 设置 VITE_IMAGE_API_KEY（及可选 BASE_URL/MODEL）并重部署。"
+        },
+        {
+          "timestamp": "2026-04-12 17:11",
+          "role": "User",
+          "action": "feedback",
+          "detail": "用户确认 Vercel 目前仅配置 IMAGE_API_KEY/IMAGE_API_MODEL/IMAGE_API_BASE_URL（无 VITE_ 前缀）。"
+        },
+        {
+          "timestamp": "2026-04-12 17:29",
+          "role": "AI",
+          "action": "implementation",
+          "detail": "已实现安全架构改造：新增 Vercel Serverless 中转 api/text.ts 与 api/image.ts，前端改为调用 /api/*，不再依赖 VITE_IMAGE_API_KEY。"
+        },
+        {
+          "timestamp": "2026-04-12 17:29",
+          "role": "System",
+          "action": "status_update",
+          "detail": "Status changed from blocked to in_progress"
+        },
+        {
+          "timestamp": "2026-04-12 17:29",
+          "role": "System",
+          "action": "test_result",
+          "detail": "本地 npm run build 再次通过（含新 api/text.ts、api/image.ts 服务端中转改造）。"
+        }
+      ]
     },
     {
       "id": "BUG-20260412-3",
@@ -180,7 +235,7 @@
     {
       "id": "BUG-20260412-5",
       "title": "Preview 缺少 Text API Key 导致词典不可用",
-      "status": "blocked",
+      "status": "confirmed",
       "priority": "high",
       "description": "用户在分支别名链接测试时，Dictionary 报错 Missing VITE_TEXT_API_KEY；同时出现 auth.getUser timeout after 10000ms。",
       "reproduce_steps": [
@@ -189,7 +244,7 @@
         "控制台报 Missing VITE_TEXT_API_KEY"
       ],
       "created_at": "2026-04-12 16:10",
-      "updated_at": "2026-04-12 16:17",
+      "updated_at": "2026-04-12 17:06",
       "history": [
         {
           "timestamp": "2026-04-12 16:10",
@@ -220,6 +275,42 @@
           "role": "System",
           "action": "status_update",
           "detail": "Status changed from in_progress to blocked"
+        },
+        {
+          "timestamp": "2026-04-12 16:18",
+          "role": "System",
+          "action": "test_result",
+          "detail": "已推送分支 feature/fix-remaining-bugs，提交 44b197d；已触发 Vercel 预览部署（部署状态需在 Vercel 面板确认）。"
+        },
+        {
+          "timestamp": "2026-04-12 16:54",
+          "role": "User",
+          "action": "feedback",
+          "detail": "用户确认 VITE_TEXT_API_* 变量已在 Vercel 设为 all environments。"
+        },
+        {
+          "timestamp": "2026-04-12 16:54",
+          "role": "System",
+          "action": "status_update",
+          "detail": "Status changed from blocked to in_progress"
+        },
+        {
+          "timestamp": "2026-04-12 17:06",
+          "role": "System",
+          "action": "test_result",
+          "detail": "用户提供新控制台日志：构建已更新到 index-BCqt1nzF.js，auth.getUser 响应正常（463ms/712ms），说明 BUG-5 的 text key/认证超时路径已缓解。"
+        },
+        {
+          "timestamp": "2026-04-12 17:06",
+          "role": "System",
+          "action": "status_update",
+          "detail": "Status changed from in_progress to confirmed"
+        },
+        {
+          "timestamp": "2026-04-12 17:06",
+          "role": "System",
+          "action": "context_switch",
+          "detail": "Switched away to BUG-20260412-2"
         }
       ]
     }

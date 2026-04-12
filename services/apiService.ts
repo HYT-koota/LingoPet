@@ -1,26 +1,35 @@
-export const CURRENT_CONFIG = {
-  textModel: (import.meta as any).env.VITE_TEXT_API_MODEL || 'deepseek-chat',
-  textBaseUrl: ((import.meta as any).env.VITE_TEXT_API_BASE_URL || 'https://api.deepseek.com').replace(/\/$/, ''),
-  hasTextKey: !!((import.meta as any).env.VITE_TEXT_API_KEY && (import.meta as any).env.VITE_TEXT_API_KEY !== ''),
-  imageModel: (import.meta as any).env.VITE_IMAGE_API_MODEL || 'Qwen/Qwen-Image',
-  imageBaseUrl: ((import.meta as any).env.VITE_IMAGE_API_BASE_URL || 'https://api.siliconflow.cn/v1').replace(/\/$/, ''),
-  hasImageKey: !!((import.meta as any).env.VITE_IMAGE_API_KEY && (import.meta as any).env.VITE_IMAGE_API_KEY !== '')
+type ChatMessage = {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
 };
 
-const MISSING_ENV_MESSAGES: Record<string, string> = {
+const isLocalDev =
+  typeof window !== 'undefined' &&
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+export const CURRENT_CONFIG = {
+  aiMode: 'server_proxy',
+  textModel: (import.meta as any).env.VITE_TEXT_API_MODEL || 'deepseek-chat',
+  textBaseUrl: ((import.meta as any).env.VITE_TEXT_API_BASE_URL || 'https://api.deepseek.com').replace(/\/$/, ''),
+  hasDirectTextKey: !!((import.meta as any).env.VITE_TEXT_API_KEY && (import.meta as any).env.VITE_TEXT_API_KEY !== ''),
+  imageModel: (import.meta as any).env.VITE_IMAGE_API_MODEL || 'Qwen/Qwen-Image',
+  imageBaseUrl: ((import.meta as any).env.VITE_IMAGE_API_BASE_URL || 'https://api.siliconflow.cn/v1').replace(/\/$/, ''),
+  hasDirectImageKey: !!((import.meta as any).env.VITE_IMAGE_API_KEY && (import.meta as any).env.VITE_IMAGE_API_KEY !== ''),
+};
+
+const MISSING_DIRECT_ENV_MESSAGES: Record<string, string> = {
   VITE_TEXT_API_KEY:
-    'Missing VITE_TEXT_API_KEY. Please add it in Vercel Environment Variables (Preview + Production) and redeploy.',
+    'Missing VITE_TEXT_API_KEY for local direct-call fallback. For deployed environments, configure TEXT_API_KEY on server side.',
   VITE_IMAGE_API_KEY:
-    'Missing VITE_IMAGE_API_KEY. Please add it in Vercel Environment Variables (Preview + Production) and redeploy.',
+    'Missing VITE_IMAGE_API_KEY for local direct-call fallback. For deployed environments, configure IMAGE_API_KEY on server side.',
 };
 
 console.log('%c LingoPet startup diagnostics %c', 'background:#FFAE0A;color:white;padding:2px 5px;border-radius:3px', '');
-console.log('-> Text model:', CURRENT_CONFIG.textModel);
-console.log('-> Text base URL:', CURRENT_CONFIG.textBaseUrl);
-console.log('-> Text API key:', CURRENT_CONFIG.hasTextKey ? 'READY' : 'MISSING');
-console.log('-> Image model:', CURRENT_CONFIG.imageModel);
-console.log('-> Image base URL:', CURRENT_CONFIG.imageBaseUrl);
-console.log('-> Image API key:', CURRENT_CONFIG.hasImageKey ? 'READY' : 'MISSING');
+console.log('-> AI mode:', 'Server proxy (/api/text, /api/image)');
+console.log('-> Text model hint:', CURRENT_CONFIG.textModel);
+console.log('-> Image model hint:', CURRENT_CONFIG.imageModel);
+console.log('-> Local direct text key fallback:', CURRENT_CONFIG.hasDirectTextKey ? 'READY' : 'MISSING');
+console.log('-> Local direct image key fallback:', CURRENT_CONFIG.hasDirectImageKey ? 'READY' : 'MISSING');
 
 function getPlaceholder(text: string, color: string = '#E5E7EB') {
   const svg = `<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg"><rect width="512" height="512" fill="#F9FAFB"/><rect x="156" y="156" width="200" height="200" rx="40" fill="${color}" opacity="0.2"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="20" fill="${color}">${text}</text></svg>`;
@@ -35,40 +44,121 @@ function normalizeImageUrl(rawUrl: string): string {
   return trimmed;
 }
 
-async function callOpenAITextAPI(messages: any[], jsonMode: boolean = true) {
+async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function callTextViaProxy(messages: ChatMessage[], jsonMode: boolean): Promise<any> {
+  const timeoutMs = 25000;
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(
+      '/api/text',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages, jsonMode }),
+      },
+      timeoutMs
+    );
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Proxy text request timed out (${timeoutMs}ms)`);
+    }
+    throw error;
+  }
+
+  let payload: any = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok || !payload?.ok) {
+    const errorMessage = payload?.error || `Text proxy request failed [${response.status}]`;
+    throw new Error(errorMessage);
+  }
+  return payload.data;
+}
+
+async function callImageViaProxy(prompt: string): Promise<string> {
+  const timeoutMs = 35000;
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(
+      '/api/image',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      },
+      timeoutMs
+    );
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Proxy image request timed out (${timeoutMs}ms)`);
+    }
+    throw error;
+  }
+
+  let payload: any = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok || !payload?.ok) {
+    const errorMessage = payload?.error || `Image proxy request failed [${response.status}]`;
+    throw new Error(errorMessage);
+  }
+
+  const imageUrl = payload?.data?.url;
+  if (!imageUrl || typeof imageUrl !== 'string') {
+    throw new Error('Image proxy returned no URL');
+  }
+  return normalizeImageUrl(imageUrl);
+}
+
+async function callOpenAITextAPIDirect(messages: ChatMessage[], jsonMode: boolean = true) {
   const apiKey = (import.meta as any).env.VITE_TEXT_API_KEY;
-  if (!apiKey) throw new Error(MISSING_ENV_MESSAGES.VITE_TEXT_API_KEY);
+  if (!apiKey) throw new Error(MISSING_DIRECT_ENV_MESSAGES.VITE_TEXT_API_KEY);
 
   const url = `${CURRENT_CONFIG.textBaseUrl}/v1/chat/completions`;
   const payload: any = {
     model: CURRENT_CONFIG.textModel,
     messages,
-    temperature: 0.7
+    temperature: 0.7,
   };
 
   const timeoutMs = 20000;
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
   let response: Response;
   try {
-    response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
+    response = await fetchWithTimeout(
+      url,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(payload),
       },
-      body: JSON.stringify(payload),
-      signal: controller.signal
-    });
+      timeoutMs
+    );
   } catch (error) {
-    clearTimeout(timeoutId);
     if (error instanceof Error && error.name === 'AbortError') {
       throw new Error(`Text API request timed out (${timeoutMs}ms)`);
     }
     throw error;
   }
-  clearTimeout(timeoutId);
 
   if (!response.ok) {
     const errorBody = await response.text();
@@ -88,41 +178,39 @@ async function callOpenAITextAPI(messages: any[], jsonMode: boolean = true) {
   }
 }
 
-async function callImageAPI(prompt: string): Promise<string> {
+async function callImageAPIDirect(prompt: string): Promise<string> {
   const apiKey = (import.meta as any).env.VITE_IMAGE_API_KEY;
-  if (!apiKey) throw new Error(MISSING_ENV_MESSAGES.VITE_IMAGE_API_KEY);
+  if (!apiKey) throw new Error(MISSING_DIRECT_ENV_MESSAGES.VITE_IMAGE_API_KEY);
 
   const url = `${CURRENT_CONFIG.imageBaseUrl}/images/generations`;
   const timeoutMs = 30000;
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
   let response: Response;
   try {
-    response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
+    response = await fetchWithTimeout(
+      url,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: CURRENT_CONFIG.imageModel,
+          prompt,
+          image_size: '512x512',
+          num_inference_steps: 20,
+          guidance_scale: 7.5,
+          num_images: 1,
+        }),
       },
-      body: JSON.stringify({
-        model: CURRENT_CONFIG.imageModel,
-        prompt,
-        image_size: '512x512',
-        num_inference_steps: 20,
-        guidance_scale: 7.5,
-        num_images: 1
-      }),
-      signal: controller.signal
-    });
+      timeoutMs
+    );
   } catch (error) {
-    clearTimeout(timeoutId);
     if (error instanceof Error && error.name === 'AbortError') {
       throw new Error(`Image API request timed out (${timeoutMs}ms)`);
     }
     throw error;
   }
-  clearTimeout(timeoutId);
 
   if (!response.ok) {
     const errorBody = await response.text();
@@ -137,13 +225,38 @@ async function callImageAPI(prompt: string): Promise<string> {
   return normalizeImageUrl(imageUrl);
 }
 
+async function callOpenAITextAPI(messages: ChatMessage[], jsonMode: boolean = true) {
+  try {
+    return await callTextViaProxy(messages, jsonMode);
+  } catch (proxyError) {
+    if (isLocalDev && CURRENT_CONFIG.hasDirectTextKey) {
+      console.warn('[apiService] /api/text unavailable in local dev, falling back to direct text API call.');
+      return callOpenAITextAPIDirect(messages, jsonMode);
+    }
+    throw proxyError;
+  }
+}
+
+async function callImageAPI(prompt: string): Promise<string> {
+  try {
+    return await callImageViaProxy(prompt);
+  } catch (proxyError) {
+    if (isLocalDev && CURRENT_CONFIG.hasDirectImageKey) {
+      console.warn('[apiService] /api/image unavailable in local dev, falling back to direct image API call.');
+      return callImageAPIDirect(prompt);
+    }
+    throw proxyError;
+  }
+}
+
 export const queryDictionary = async (userInput: string) => {
-  const messages = [
+  const messages: ChatMessage[] = [
     {
       role: 'system',
-      content: 'You are a professional language tutor. Respond with a valid JSON object only, no extra text. Format: { "identifiedWord": "word", "definition": "English meaning", "translation": "Chinese translation", "example": "example sentence", "visualDescription": "scene for AI image" }'
+      content:
+        'You are a professional language tutor. Respond with a valid JSON object only, no extra text. Format: { "identifiedWord": "word", "definition": "English meaning", "translation": "Chinese translation", "example": "example sentence", "visualDescription": "scene for AI image" }',
     },
-    { role: 'user', content: `Explain: "${userInput}"` }
+    { role: 'user', content: `Explain: "${userInput}"` },
   ];
   return await callOpenAITextAPI(messages);
 };
@@ -151,15 +264,16 @@ export const queryDictionary = async (userInput: string) => {
 export const generateShortTranslation = async (word: string, definition?: string): Promise<string> => {
   if (!word.trim()) return '';
 
-  const messages = [
+  const messages: ChatMessage[] = [
     {
       role: 'system',
-      content: 'You are a bilingual dictionary assistant. Return valid JSON only in this format: { "translation": "short Chinese translation" }. Keep translation concise (usually 2-8 Chinese characters).'
+      content:
+        'You are a bilingual dictionary assistant. Return valid JSON only in this format: { "translation": "short Chinese translation" }. Keep translation concise (usually 2-8 Chinese characters).',
     },
     {
       role: 'user',
-      content: `Word: ${word}\nDefinition: ${definition || ''}`
-    }
+      content: `Word: ${word}\nDefinition: ${definition || ''}`,
+    },
   ];
 
   try {
@@ -194,12 +308,13 @@ export const generatePetSprite = async (stage: number): Promise<string> => {
 };
 
 export const generatePetReaction = async (petState: any, stats: any, trigger: string) => {
-  const messages = [
+  const messages: ChatMessage[] = [
     {
       role: 'system',
-      content: 'You are a cute virtual pet. Respond with a valid JSON object only, no extra text. Format: { "text": "what the pet says", "mood": "happy|sleepy|excited|proud" }'
+      content:
+        'You are a cute virtual pet. Respond with a valid JSON object only, no extra text. Format: { "text": "what the pet says", "mood": "happy|sleepy|excited|proud" }',
     },
-    { role: 'user', content: `The pet just experienced: ${trigger}` }
+    { role: 'user', content: `The pet just experienced: ${trigger}` },
   ];
   try {
     return await callOpenAITextAPI(messages);

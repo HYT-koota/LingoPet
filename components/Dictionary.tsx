@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Mic, Search, Loader2, CheckCircle, Sparkles, BrainCircuit } from 'lucide-react';
-import { queryDictionary, generateCardImage, CURRENT_CONFIG } from '../services/apiService';
+import { queryDictionary, generateCardImage } from '../services/apiService';
 import { saveWord, updateWord, updateDailyStats, getDailyStats } from '../services/supabaseDataService';
 import { WordEntry } from '../types';
 
@@ -15,7 +15,6 @@ const Dictionary: React.FC<DictionaryProps> = ({ onWordAdded }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<any | null>(null);
   const [added, setAdded] = useState(false);
-  const textApiReady = CURRENT_CONFIG.hasTextKey;
 
   const startListening = () => {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
@@ -37,10 +36,6 @@ const Dictionary: React.FC<DictionaryProps> = ({ onWordAdded }) => {
 
   const handleSearch = async (searchTerm: string = input) => {
     if (!searchTerm.trim()) return;
-    if (!textApiReady) {
-      alert('词典服务未配置：缺少 VITE_TEXT_API_KEY。请在 Vercel 的 Preview 和 Production 环境都设置后重新部署。');
-      return;
-    }
     console.log('[Dictionary] handleSearch called for:', searchTerm);
     setIsLoading(true);
     setResult(null);
@@ -131,11 +126,6 @@ const Dictionary: React.FC<DictionaryProps> = ({ onWordAdded }) => {
       </div>
 
       <div className="relative group z-10">
-        {!textApiReady && (
-          <div className="mb-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            Dictionary is temporarily unavailable on this deployment: missing `VITE_TEXT_API_KEY`.
-          </div>
-        )}
         <div className={`absolute -inset-1 bg-gradient-to-r from-brand-300 to-teal-200 rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-1000 ${isListening ? 'animate-pulse opacity-60' : ''}`}></div>
         <div className="relative flex items-center w-full bg-white rounded-2xl shadow-xl transition-all border border-brand-100/50 overflow-hidden">
             <input
@@ -154,7 +144,7 @@ const Dictionary: React.FC<DictionaryProps> = ({ onWordAdded }) => {
             </button>
             <button 
               onClick={() => handleSearch()}
-              disabled={isLoading || !textApiReady}
+              disabled={isLoading}
               className="bg-brand-500 hover:bg-brand-600 text-white p-5 transition-all disabled:opacity-50"
             >
               {isLoading ? <Loader2 size={24} className="animate-spin" /> : <Search size={24} strokeWidth={3} />}
