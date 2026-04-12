@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { PetState, PetStage } from '../types';
 import { Trophy, BookOpen, MapPin, Star, Activity, ChevronRight } from 'lucide-react';
 import { CURRENT_CONFIG } from '../services/apiService';
@@ -11,7 +11,20 @@ interface PetProfileProps {
 }
 
 const PetProfile: React.FC<PetProfileProps> = ({ pet, onOpenNotebook }) => {
-  const wordCount = getWords().length;
+  const [wordCount, setWordCount] = useState(0);
+
+  useEffect(() => {
+    const loadWordCount = async () => {
+      try {
+        const words = await getWords();
+        setWordCount(words.length);
+      } catch (error) {
+        console.error('[PetProfile] Error loading word count:', error);
+        setWordCount(0);
+      }
+    };
+    loadWordCount();
+  }, []);
 
   const stages = [
     { id: PetStage.EGG, label: 'Egg', desc: 'Waiting to hatch' },
@@ -21,7 +34,7 @@ const PetProfile: React.FC<PetProfileProps> = ({ pet, onOpenNotebook }) => {
   ];
 
   return (
-    <div className="h-full w-full overflow-y-auto px-6 py-6 bg-brand-50/50 relative">
+    <div className="h-full w-full overflow-y-auto app-main-scroll px-6 py-6 bg-brand-50/50 relative">
        <div className="mb-8">
            <h1 className="text-3xl font-extrabold text-brand-800">Pet Journey</h1>
            <p className="text-brand-600">Cycle {pet.cycle} • {pet.name}</p>

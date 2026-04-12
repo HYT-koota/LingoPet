@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AppMode, PetState, PetStage, DailyStats, WordEntry, ReviewMode } from './types';
 import Login from './components/Login';
 import Dictionary from './components/Dictionary';
@@ -27,6 +27,11 @@ const App: React.FC = () => {
   const [reviewMode, setReviewMode] = useState<ReviewMode>('active');
   const [showPostcard, setShowPostcard] = useState<string | null>(null);
   const [showFarewell, setShowFarewell] = useState(false);
+
+  // 图片生成状态跟踪
+  const generatingRef = useRef<{[stage: number]: boolean}>({});
+  const petImageRecoveryRef = useRef<{[stage: number]: boolean}>({});
+  const petImageRecoveryAttemptsRef = useRef<{[stage: number]: number}>({});
 
   // 渲染日志 - 在主要逻辑之前
   useEffect(() => {
@@ -88,24 +93,59 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!pet) return;
 
-    if (stats) setStats(stats);
-
     if (pet.isTraveling && pet.travelReturnTime && Date.now() > pet.travelReturnTime) {
       handlePetReturn();
     }
 
     // Check if current pet stage has an image, if not, generate it
-    if (!pet.imageUrls?.[pet.stage] && pet.stage !== PetStage.DEPARTED) {
-      console.log(`[Pet] Generating sprite for stage ${pet.stage}, current imageUrls:`, pet.imageUrls);
-      generatePetSprite(pet.stage).then(url => {
-        console.log(`[Pet] Generated sprite URL for stage ${pet.stage}:`, url ? 'Success' : 'Failed', url?.substring(0, 50) + '...');
+    // Skip if departed stage or already generating
+    if (pet.stage === PetStage.DEPARTED) return;
+
+    const currentStage = pet.stage;
+    const currentImageUrl = pet.imageUrls?.[currentStage];
+
+    // Check if we're already generating for this stage
+    if (generatingRef.current[currentStage]) {
+      console.log(`[Pet] Already generating sprite for stage ${currentStage}, skipping`);
+      return;
+    }
+
+    // Helper function to check if URL is a placeholder (base64 SVG)
+    const isPlaceholderUrl = (url: string | undefined): boolean => {
+      if (!url) return false;
+      return url.startsWith('data:image/svg+xml;base64,');
+    };
+
+    // Only generate if no image or it's a placeholder
+    if (!currentImageUrl || isPlaceholderUrl(currentImageUrl)) {
+      console.log(`[Pet] Generating sprite for stage ${currentStage}, current imageUrls:`, pet.imageUrls);
+
+      // Mark as generating
+      generatingRef.current[currentStage] = true;
+
+      generatePetSprite(currentStage).then(url => {
+        console.log(`[Pet] Generated sprite URL for stage ${currentStage}:`, url ? 'Success' : 'Failed', url?.substring(0, 50) + '...');
+
+        // Clear generating flag
+        generatingRef.current[currentStage] = false;
+
         if (url) {
-          const newUrls = { ...pet.imageUrls, [pet.stage]: url };
-          updatePet({ ...pet, imageUrls: newUrls });
+          // Check if pet state hasn't changed since we started generating
+          if (pet && pet.stage === currentStage) {
+            const newUrls = { ...pet.imageUrls, [currentStage]: url };
+            updatePet({ ...pet, imageUrls: newUrls });
+            console.log(`[Pet] Updated image for stage ${currentStage}`);
+          } else {
+            console.warn(`[Pet] Pet stage changed from ${currentStage} to ${pet?.stage} while generating, skipping update`);
+          }
         }
       }).catch(err => {
-        console.error(`[Pet] Failed to generate sprite for stage ${pet.stage}:`, err);
+        console.error(`[Pet] Failed to generate sprite for stage ${currentStage}:`, err);
+        // Clear generating flag on error too
+        generatingRef.current[currentStage] = false;
       });
+    } else {
+      console.log(`[Pet] Stage ${currentStage} already has image, skipping generation`);
     }
   }, [pet?.stage, pet?.isTraveling, pet?.cycle]);
 
@@ -140,7 +180,7 @@ const App: React.FC = () => {
       console.log('[Review] Calling getWords with timeout...');
       const allWords = await Promise.race([
         getWords(),
-        new Promise<WordEntry[]>((_, reject) => setTimeout(() => reject(new Error('getWords timeout after 10 seconds')), 10000))
+        new Promise<WordEntry[]>((_, reject) => setTimeout(() => reject(new Error('getWords timeout after 5000ms')), 5000))
       ]);
       console.log(`[Review] Total words: ${allWords.length}`);
     const today = new Date().toLocaleDateString('en-CA');
@@ -174,11 +214,11 @@ const App: React.FC = () => {
       });
       setReviewMode('passive');
     } else {
-      // Brain Gym: Due words or random if none due
-      selection = allWords.filter(w => w.nextReviewDate <= Date.now() && w.reviewLevel > 0);
+      // Brain Gym: Due words (nextReviewDate <= today) regardless of reviewLevel
+      selection = allWords.filter(w => w.nextReviewDate <= Date.now());
       if (selection.length === 0) {
-        // Fallback for demo: Grab random existing words
-        selection = allWords.filter(w => w.reviewLevel > 0).sort(() => 0.5 - Math.random()).slice(0, 5);
+        // Fallback for demo: Grab random words (including level 0)
+        selection = allWords.sort(() => 0.5 - Math.random()).slice(0, 5);
       }
       setReviewMode('active');
     }
@@ -195,9 +235,17 @@ const App: React.FC = () => {
     }
 
     if (selection.length === 0 && type === 'due') {
-      console.warn(`[Review] No words available for Brain Gym. Total words: ${allWords.length}`);
+      console.warn(`[Review] No due words for Brain Gym. Total words: ${allWords.length}`);
       console.warn('[Review] All words review levels:', allWords.map(w => ({ word: w.word, reviewLevel: w.reviewLevel, nextReviewDate: new Date(w.nextReviewDate).toISOString() })));
-      alert("No words available for Brain Gym. Search words in Dictionary first!");
+
+      // More helpful message
+      if (allWords.length === 0) {
+        alert("No words in your notebook yet! Add words in Dictionary first.");
+      } else {
+        const dueCount = allWords.filter(w => w.nextReviewDate <= Date.now()).length;
+        const totalCount = allWords.length;
+        alert(`No words due for review yet! You have ${totalCount} words total, ${dueCount} due now. Try Daily Review first to start learning your words!`);
+      }
       return;
     }
 
@@ -319,6 +367,45 @@ const App: React.FC = () => {
     updatePet({ ...pet, dailyQuote: reaction.text, mood: reaction.mood as any });
   };
 
+  const handlePetImageError = async (stage: number, imageUrl?: string) => {
+    if (!pet || stage === PetStage.DEPARTED) return;
+    if (imageUrl?.startsWith('data:image/svg+xml;base64,')) return;
+
+    const recoveryAttempts = petImageRecoveryAttemptsRef.current[stage] || 0;
+    if (recoveryAttempts >= 2) {
+      console.warn(`[Pet] Stage ${stage} image failed more than 2 times, skipping auto-recovery`);
+      return;
+    }
+
+    if (petImageRecoveryRef.current[stage]) {
+      console.log(`[Pet] Stage ${stage} image recovery already in progress`);
+      return;
+    }
+
+    petImageRecoveryRef.current[stage] = true;
+    petImageRecoveryAttemptsRef.current[stage] = recoveryAttempts + 1;
+
+    try {
+      const refreshedUrl = await generatePetSprite(stage);
+      if (!refreshedUrl) return;
+
+      const currentStageImage = pet.imageUrls?.[stage];
+      if (imageUrl && currentStageImage && currentStageImage !== imageUrl) return;
+
+      await updatePet({
+        ...pet,
+        imageUrls: {
+          ...pet.imageUrls,
+          [stage]: refreshedUrl
+        }
+      });
+    } catch (error) {
+      console.error(`[Pet] Failed to recover image for stage ${stage}:`, error);
+    } finally {
+      petImageRecoveryRef.current[stage] = false;
+    }
+  };
+
   // --- 加载中状态 ---
   if (loading) {
     return (
@@ -350,7 +437,7 @@ const App: React.FC = () => {
 
   // --- 主应用 ---
   return (
-    <div className="h-full w-full flex flex-col bg-brand-50 text-gray-800 font-sans">
+    <div className="app-shell w-full flex flex-col bg-brand-50 text-gray-800 font-sans">
 
       {/* Top Bar (Hidden in Notebook mode for cleaner look) */}
       {mode !== AppMode.NOTEBOOK && (
@@ -386,14 +473,14 @@ const App: React.FC = () => {
       )}
 
       {/* Main Viewport */}
-      <main className="flex-1 overflow-hidden relative flex flex-col">
+      <main className="flex-1 min-h-0 overflow-hidden relative flex flex-col">
         {mode === AppMode.HOME && (
-          <div className="flex flex-col h-full p-6 overflow-y-auto animate-pop z-10">
+          <div className="flex flex-col h-full min-h-0 p-6 overflow-y-auto app-main-scroll animate-pop z-10">
 
             {/* Pet Area - Now using the horizontal PetNode */}
             <div className="mb-6 relative z-10">
               <div className="absolute inset-0 bg-gradient-to-r from-brand-100 to-brand-50 rounded-3xl opacity-50"></div>
-              <PetNode pet={pet} onClick={() => { }} />
+              <PetNode pet={pet} onClick={() => { }} onImageError={handlePetImageError} />
             </div>
 
             {/* Travel Button for Teens/Adults */}
@@ -448,25 +535,25 @@ const App: React.FC = () => {
         )}
 
         {mode === AppMode.PET_PROFILE && (
-          <div className="h-full flex flex-col animate-pop">
+          <div className="h-full min-h-0 flex flex-col animate-pop">
             <PetProfile pet={pet} onOpenNotebook={() => setMode(AppMode.NOTEBOOK)} />
           </div>
         )}
 
         {mode === AppMode.NOTEBOOK && (
-          <div className="h-full flex flex-col animate-pop">
+          <div className="h-full min-h-0 flex flex-col animate-pop">
             <Notebook onBack={() => setMode(AppMode.PET_PROFILE)} />
           </div>
         )}
 
         {mode === AppMode.DICTIONARY && (
-          <div className="h-full flex flex-col animate-pop">
+          <div className="h-full min-h-0 flex flex-col animate-pop">
             <Dictionary onWordAdded={handleWordAdded} />
           </div>
         )}
 
         {mode === AppMode.REVIEW && (
-          <div className="h-full flex flex-col animate-pop">
+          <div className="h-full min-h-0 flex flex-col animate-pop">
             <ReviewSession words={reviewWords} mode={reviewMode} onComplete={handleReviewComplete} />
           </div>
         )}

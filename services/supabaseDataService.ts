@@ -7,52 +7,144 @@ import { PetState, PetStage, WordEntry, DailyStats } from '../types';
  * 全局 fetch 超时已设置为 5 秒，这里不需要额外的 Promise.race
  * 主要是处理认证失败后的重试逻辑
  */
-const getUserWithRetry = async (maxRetries = 2): Promise<{ data: { user: any } }> => {
+const getUserWithRetry = async (maxRetries = 3): Promise<{ data: { user: any } }> => {
+  const AUTH_TIMEOUT_MS = 10000; // 认证超时：10秒
+  const BASE_DELAY_MS = 1000; // 基础延迟1秒
+
   for (let i = 0; i < maxRetries; i++) {
     let startTime: number | undefined;
     try {
       console.log(`[Auth Retry] Attempt ${i + 1}/${maxRetries} calling supabase.auth.getUser()`);
       startTime = Date.now();
 
-      // 直接调用 getUser，全局 fetch 超时会在 5 秒后中止请求
-      // 添加额外超时保护（3秒），防止无限等待
+      // 认证请求：10秒超时
       const result = await Promise.race([
         supabase.auth.getUser(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('auth.getUser() timeout after 3000ms')), 3000))
-      ]);
+        new Promise((_, reject) => setTimeout(() => reject(new Error(`auth.getUser() timeout after ${AUTH_TIMEOUT_MS}ms`)), AUTH_TIMEOUT_MS))
+      ]) as { data: { user: any } };
 
       const elapsed = Date.now() - startTime!;
       console.log(`[Auth Retry] Attempt ${i + 1} completed in ${elapsed}ms, user:`, result.data.user ? '✅ Present' : '❌ None');
 
       if (result.data.user) return result;
 
+      // 没有用户但请求成功（可能未登录状态）
       if (i < maxRetries - 1) {
-        const delay = 1000 * (i + 1);
-        console.log(`[Auth Retry] No user found, waiting ${delay}ms before retry...`);
+        // 指数退避 + 抖动：基础延迟 * 2^i + 随机抖动(0-500ms)
+        const exponentialDelay = BASE_DELAY_MS * Math.pow(2, i);
+        const jitter = Math.floor(Math.random() * 501); // 0-500ms随机抖动
+        const delay = exponentialDelay + jitter;
+
+        console.log(`[Auth Retry] No user found, waiting ${delay}ms (exp:${exponentialDelay}+jitter:${jitter}) before retry ${i + 2}...`);
         await new Promise(r => setTimeout(r, delay));
       }
     } catch (error) {
       const elapsed = startTime !== undefined ? Date.now() - startTime : 0;
       console.error(`[Auth Retry] Attempt ${i + 1} failed ${startTime !== undefined ? `after ${elapsed}ms` : '(startTime not set)'}:`, error);
-      if (i === maxRetries - 1) throw error;
+
+      if (i === maxRetries - 1) {
+        // 认证失败后返回空用户而不是抛出错误，让调用方处理
+        console.warn('[Auth Retry] All attempts failed, returning null user');
+        return { data: { user: null } };
+      }
+
+      // 错误重试也使用指数退避
+      const exponentialDelay = BASE_DELAY_MS * Math.pow(2, i);
+      const jitter = Math.floor(Math.random() * 501);
+      const delay = exponentialDelay + jitter;
+
+      console.log(`[Auth Retry] Request failed, waiting ${delay}ms (exp:${exponentialDelay}+jitter:${jitter}) before retry ${i + 2}...`);
+      await new Promise(r => setTimeout(r, delay));
     }
   }
-  throw new Error('Auth failed after retries');
+  // 所有重试后仍失败，返回空用户
+  console.warn('[Auth Retry] Auth failed after retries, returning null user');
+  return { data: { user: null } };
 };
 
 /**
- * 认证健康检查
+ * 综合连接健康检查
+ * 检查认证、数据库连接和响应时间
  */
 export const checkAuthHealth = async () => {
-  const start = Date.now();
+  const overallStart = Date.now();
+  const healthReport = {
+    overallHealthy: false,
+    authHealthy: false,
+    dbHealthy: false,
+    authLatency: 0,
+    dbLatency: 0,
+    user: null as any,
+    errors: [] as string[],
+    timestamp: new Date().toISOString()
+  };
+
   try {
-    const result = await supabase.auth.getUser();
-    const elapsed = Date.now() - start;
-    console.log(`[Auth Health] getUser() took ${elapsed}ms`);
-    return { healthy: elapsed < 2000, user: result.data.user, elapsed };
+    // 1. 认证健康检查（10秒超时）
+    const authStart = Date.now();
+    try {
+      const authResult = await Promise.race([
+        supabase.auth.getUser(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('认证健康检查超时 (10000ms)')), 10000))
+      ]) as any;
+      healthReport.authLatency = Date.now() - authStart;
+      healthReport.user = authResult.data.user;
+      healthReport.authHealthy = healthReport.authLatency < 5000; // 5秒内为健康
+      console.log(`[Health] 认证检查完成: ${healthReport.authLatency}ms, 用户: ${healthReport.user ? '✅' : '❌'}`);
+    } catch (authError) {
+      healthReport.authLatency = Date.now() - authStart;
+      healthReport.errors.push(`认证失败: ${authError instanceof Error ? authError.message : String(authError)}`);
+      console.error('[Health] 认证检查失败:', authError);
+    }
+
+    // 2. 数据库连接检查（15秒超时）
+    const dbStart = Date.now();
+    try {
+      const dbResult = await Promise.race([
+        supabase.from('words').select('count(*)', { count: 'exact', head: true }).limit(1),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('数据库健康检查超时 (15000ms)')), 15000))
+      ]) as any;
+      healthReport.dbLatency = Date.now() - dbStart;
+      healthReport.dbHealthy = !dbResult.error && healthReport.dbLatency < 8000; // 8秒内为健康
+      console.log(`[Health] 数据库检查完成: ${healthReport.dbLatency}ms, 状态: ${dbResult.error ? '❌' : '✅'}`);
+
+      if (dbResult.error) {
+        healthReport.errors.push(`数据库查询错误: ${dbResult.error.message}`);
+      }
+    } catch (dbError) {
+      healthReport.dbLatency = Date.now() - dbStart;
+      healthReport.errors.push(`数据库检查失败: ${dbError instanceof Error ? dbError.message : String(dbError)}`);
+      console.error('[Health] 数据库检查失败:', dbError);
+    }
+
+    // 3. 综合健康评估
+    healthReport.overallHealthy = healthReport.authHealthy && healthReport.dbHealthy;
+    const totalLatency = Date.now() - overallStart;
+
+    console.log(`[Health] 综合健康报告: ${healthReport.overallHealthy ? '✅ 健康' : '⚠️ 异常'}, 总耗时: ${totalLatency}ms`);
+    console.log(`[Health] 详情: 认证${healthReport.authHealthy ? '✅' : '❌'}(${healthReport.authLatency}ms), 数据库${healthReport.dbHealthy ? '✅' : '❌'}(${healthReport.dbLatency}ms)`);
+    if (healthReport.errors.length > 0) {
+      console.log('[Health] 错误列表:', healthReport.errors);
+    }
+
+    return {
+      ...healthReport,
+      totalLatency,
+      suggestions: healthReport.errors.length > 0 ? [
+        '建议：检查网络连接',
+        '建议：验证Supabase项目状态',
+        '建议：查看控制台错误详情'
+      ] : ['系统运行正常']
+    };
   } catch (error) {
-    console.error('[Auth Health] Error:', error);
-    return { healthy: false, error, elapsed: Date.now() - start };
+    const totalLatency = Date.now() - overallStart;
+    console.error('[Health] 健康检查异常:', error);
+    return {
+      ...healthReport,
+      totalLatency,
+      errors: [...healthReport.errors, `全局异常: ${error instanceof Error ? error.message : String(error)}`],
+      suggestions: ['严重：系统健康检查失败，请检查网络和Supabase配置']
+    };
   }
 };
 
@@ -157,6 +249,12 @@ export const getWords = async (): Promise<WordEntry[]> => {
   console.log('[getWords] Auth result:', userResult);
   console.log('[getWords] User ID:', userId, 'User:', userResult.data.user);
 
+  // 如果没有用户ID，返回空数组（用户未认证或认证失败）
+  if (!userId) {
+    console.warn('[getWords] No user ID found, returning empty array. User may not be authenticated.');
+    return [];
+  }
+
   let query = supabase
     .from('words')
     .select('*')
@@ -171,8 +269,8 @@ export const getWords = async (): Promise<WordEntry[]> => {
   try {
     const queryResult = await Promise.race([
       query,
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Database query timeout after 5000ms')), 5000))
-    ]);
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Database query timeout after 15000ms')), 15000))
+    ]) as any;
     data = queryResult.data;
     error = queryResult.error;
   } catch (queryError) {
@@ -186,7 +284,7 @@ export const getWords = async (): Promise<WordEntry[]> => {
   }
 
   console.log('[getWords] Retrieved words count:', data?.length || 0);
-  const words = (data || []).map(w => ({
+  const words = (data || []).map((w: any) => ({
     id: w.id,
     word: w.word,
     definition: w.definition,
@@ -202,7 +300,7 @@ export const getWords = async (): Promise<WordEntry[]> => {
     todayImageDate: new Date().toISOString().split('T')[0], // 如果有 image_url 认为是今天生成的
   }));
 
-  console.log('[getWords] Mapped words:', words.map(w => ({ word: w.word, addedAt: w.addedAt, reviewLevel: w.reviewLevel })));
+  console.log('[getWords] Mapped words:', words.map((w: WordEntry) => ({ word: w.word, addedAt: w.addedAt, reviewLevel: w.reviewLevel })));
   return words;
 };
 
@@ -247,8 +345,8 @@ export const saveWord = async (newWord: WordEntry) => {
         .eq('user_id', userId)
         .ilike('word', newWord.word.toLowerCase())
         .maybeSingle(),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Check existing word query timeout after 5000ms')), 5000))
-    ]);
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Check existing word query timeout after 15000ms')), 15000))
+    ]) as any;
     existing = checkResult.data;
     checkError = checkResult.error;
   } catch (checkQueryError) {
@@ -271,8 +369,8 @@ export const saveWord = async (newWord: WordEntry) => {
           .from('words')
           .update(wordData)
           .eq('id', existing.id),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Update word query timeout after 5000ms')), 5000))
-      ]);
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Update word query timeout after 15000ms')), 15000))
+      ]) as any;
       updateError = updateResult.error;
     } catch (updateQueryError) {
       console.error('[saveWord] Update word query failed:', updateQueryError);
@@ -293,8 +391,8 @@ export const saveWord = async (newWord: WordEntry) => {
         supabase
           .from('words')
           .insert([{ ...wordData, id: newWord.id }]),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Insert word query timeout after 5000ms')), 5000))
-      ]);
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Insert word query timeout after 15000ms')), 15000))
+      ]) as any;
       insertError = insertResult.error;
     } catch (insertQueryError) {
       console.error('[saveWord] Insert word query failed:', insertQueryError);
@@ -317,6 +415,10 @@ export const updateWord = async (id: string, updates: Partial<WordEntry>) => {
   console.log('[updateWord] Updating word ID:', id, 'with updates:', updates);
 
   const updateData: any = {};
+  if (updates.translation !== undefined) updateData.translation = updates.translation;
+  if (updates.definition !== undefined) updateData.definition = updates.definition;
+  if (updates.context !== undefined) updateData.context = updates.context;
+  if (updates.visualDescription !== undefined) updateData.visual_description = updates.visualDescription;
   if (updates.todayImage !== undefined) updateData.image_url = updates.todayImage;
   if (updates.reviewLevel !== undefined) updateData.review_level = updates.reviewLevel;
   if (updates.lastReviewedAt !== undefined) updateData.last_reviewed_at = updates.lastReviewedAt ? new Date(updates.lastReviewedAt).toISOString() : null;

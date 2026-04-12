@@ -1,3 +1,6 @@
+/* Handwriting font for quotes */
+@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -7,5 +10,28 @@ html {
   font-family: 'Nunito', sans-serif;
 }
 
-/* Handwriting font for quotes */
-@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap');
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.app-shell {
+  height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.app-main-scroll {
+  -webkit-overflow-scrolling: touch;
+}
+
+.pb-safe {
+  padding-bottom: max(0.75rem, calc(env(safe-area-inset-bottom, 0px) + 0.5rem));
+}
