@@ -7,6 +7,13 @@ export const CURRENT_CONFIG = {
   hasImageKey: !!((import.meta as any).env.VITE_IMAGE_API_KEY && (import.meta as any).env.VITE_IMAGE_API_KEY !== '')
 };
 
+const MISSING_ENV_MESSAGES: Record<string, string> = {
+  VITE_TEXT_API_KEY:
+    'Missing VITE_TEXT_API_KEY. Please add it in Vercel Environment Variables (Preview + Production) and redeploy.',
+  VITE_IMAGE_API_KEY:
+    'Missing VITE_IMAGE_API_KEY. Please add it in Vercel Environment Variables (Preview + Production) and redeploy.',
+};
+
 console.log('%c LingoPet startup diagnostics %c', 'background:#FFAE0A;color:white;padding:2px 5px;border-radius:3px', '');
 console.log('-> Text model:', CURRENT_CONFIG.textModel);
 console.log('-> Text base URL:', CURRENT_CONFIG.textBaseUrl);
@@ -30,7 +37,7 @@ function normalizeImageUrl(rawUrl: string): string {
 
 async function callOpenAITextAPI(messages: any[], jsonMode: boolean = true) {
   const apiKey = (import.meta as any).env.VITE_TEXT_API_KEY;
-  if (!apiKey) throw new Error('Missing VITE_TEXT_API_KEY');
+  if (!apiKey) throw new Error(MISSING_ENV_MESSAGES.VITE_TEXT_API_KEY);
 
   const url = `${CURRENT_CONFIG.textBaseUrl}/v1/chat/completions`;
   const payload: any = {
@@ -83,7 +90,7 @@ async function callOpenAITextAPI(messages: any[], jsonMode: boolean = true) {
 
 async function callImageAPI(prompt: string): Promise<string> {
   const apiKey = (import.meta as any).env.VITE_IMAGE_API_KEY;
-  if (!apiKey) throw new Error('Missing VITE_IMAGE_API_KEY');
+  if (!apiKey) throw new Error(MISSING_ENV_MESSAGES.VITE_IMAGE_API_KEY);
 
   const url = `${CURRENT_CONFIG.imageBaseUrl}/images/generations`;
   const timeoutMs = 30000;

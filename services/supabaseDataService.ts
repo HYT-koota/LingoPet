@@ -7,6 +7,24 @@ import { PetState, PetStage, WordEntry, DailyStats } from '../types';
  * 全局 fetch 超时已设置为 5 秒，这里不需要额外的 Promise.race
  * 主要是处理认证失败后的重试逻辑
  */
+const getUserFromSessionFallback = async (): Promise<any | null> => {
+  try {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) {
+      console.warn('[Auth Retry] getSession fallback failed:', error.message);
+      return null;
+    }
+    if (data.session?.user) {
+      console.log('[Auth Retry] Using cached session user as fallback');
+      return data.session.user;
+    }
+    return null;
+  } catch (error) {
+    console.warn('[Auth Retry] getSession fallback threw:', error);
+    return null;
+  }
+};
+
 const getUserWithRetry = async (maxRetries = 3): Promise<{ data: { user: any } }> => {
   const AUTH_TIMEOUT_MS = 10000; // 认证超时：10秒
   const BASE_DELAY_MS = 1000; // 基础延迟1秒
@@ -27,6 +45,8 @@ const getUserWithRetry = async (maxRetries = 3): Promise<{ data: { user: any } }
       console.log(`[Auth Retry] Attempt ${i + 1} completed in ${elapsed}ms, user:`, result.data.user ? '✅ Present' : '❌ None');
 
       if (result.data.user) return result;
+      const fallbackUser = await getUserFromSessionFallback();
+      if (fallbackUser) return { data: { user: fallbackUser } };
 
       // 没有用户但请求成功（可能未登录状态）
       if (i < maxRetries - 1) {
@@ -41,6 +61,8 @@ const getUserWithRetry = async (maxRetries = 3): Promise<{ data: { user: any } }
     } catch (error) {
       const elapsed = startTime !== undefined ? Date.now() - startTime : 0;
       console.error(`[Auth Retry] Attempt ${i + 1} failed ${startTime !== undefined ? `after ${elapsed}ms` : '(startTime not set)'}:`, error);
+      const fallbackUser = await getUserFromSessionFallback();
+      if (fallbackUser) return { data: { user: fallbackUser } };
 
       if (i === maxRetries - 1) {
         // 认证失败后返回空用户而不是抛出错误，让调用方处理
