@@ -2,14 +2,33 @@ import { supabase } from './supabaseClient';
 import { PetState, PetStage, WordEntry, DailyStats } from '../types';
 
 // ========== 认证辅助函数 ==========
-/**
- * 带重试的 getUser 包装器
- * 全局 fetch 超时已设置为 5 秒，这里不需要额外的 Promise.race
- * 主要是处理认证失败后的重试逻辑
- */
+type UserResult = { data: { user: any } };
+
+const AUTH_TIMEOUT_MS = 15000;
+const SESSION_FALLBACK_TIMEOUT_MS = 5000;
+const BASE_DELAY_MS = 1000;
+let inFlightUserRequest: Promise<UserResult> | null = null;
+
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> => {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+};
+
 const getUserFromSessionFallback = async (): Promise<any | null> => {
   try {
-    const { data, error } = await supabase.auth.getSession();
+    const { data, error } = await withTimeout(
+      supabase.auth.getSession(),
+      SESSION_FALLBACK_TIMEOUT_MS,
+      `auth.getSession() timeout after ${SESSION_FALLBACK_TIMEOUT_MS}ms`
+    );
     if (error) {
       console.warn('[Auth Retry] getSession fallback failed:', error.message);
       return null;
@@ -25,9 +44,7 @@ const getUserFromSessionFallback = async (): Promise<any | null> => {
   }
 };
 
-const getUserWithRetry = async (maxRetries = 3): Promise<{ data: { user: any } }> => {
-  const AUTH_TIMEOUT_MS = 15000; // 认证超时：15秒
-  const BASE_DELAY_MS = 1000; // 基础延迟1秒
+const getUserWithRetryInternal = async (maxRetries = 3): Promise<UserResult> => {
   const cachedUser = await getUserFromSessionFallback();
   if (cachedUser) {
     console.log('[Auth Retry] Using cached session user before network retry');
@@ -40,24 +57,22 @@ const getUserWithRetry = async (maxRetries = 3): Promise<{ data: { user: any } }
       console.log(`[Auth Retry] Attempt ${i + 1}/${maxRetries} calling supabase.auth.getUser()`);
       startTime = Date.now();
 
-      // 认证请求：10秒超时
-      const result = await Promise.race([
+      const result = await withTimeout(
         supabase.auth.getUser(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error(`auth.getUser() timeout after ${AUTH_TIMEOUT_MS}ms`)), AUTH_TIMEOUT_MS))
-      ]) as { data: { user: any } };
+        AUTH_TIMEOUT_MS,
+        `auth.getUser() timeout after ${AUTH_TIMEOUT_MS}ms`
+      );
 
-      const elapsed = Date.now() - startTime!;
+      const elapsed = Date.now() - startTime;
       console.log(`[Auth Retry] Attempt ${i + 1} completed in ${elapsed}ms, user:`, result.data.user ? '✅ Present' : '❌ None');
 
       if (result.data.user) return result;
       const fallbackUser = await getUserFromSessionFallback();
       if (fallbackUser) return { data: { user: fallbackUser } };
 
-      // 没有用户但请求成功（可能未登录状态）
       if (i < maxRetries - 1) {
-        // 指数退避 + 抖动：基础延迟 * 2^i + 随机抖动(0-500ms)
         const exponentialDelay = BASE_DELAY_MS * Math.pow(2, i);
-        const jitter = Math.floor(Math.random() * 501); // 0-500ms随机抖动
+        const jitter = Math.floor(Math.random() * 501);
         const delay = exponentialDelay + jitter;
 
         console.log(`[Auth Retry] No user found, waiting ${delay}ms (exp:${exponentialDelay}+jitter:${jitter}) before retry ${i + 2}...`);
@@ -70,12 +85,10 @@ const getUserWithRetry = async (maxRetries = 3): Promise<{ data: { user: any } }
       if (fallbackUser) return { data: { user: fallbackUser } };
 
       if (i === maxRetries - 1) {
-        // 认证失败后返回空用户而不是抛出错误，让调用方处理
         console.warn('[Auth Retry] All attempts failed, returning null user');
         return { data: { user: null } };
       }
 
-      // 错误重试也使用指数退避
       const exponentialDelay = BASE_DELAY_MS * Math.pow(2, i);
       const jitter = Math.floor(Math.random() * 501);
       const delay = exponentialDelay + jitter;
@@ -84,9 +97,21 @@ const getUserWithRetry = async (maxRetries = 3): Promise<{ data: { user: any } }
       await new Promise(r => setTimeout(r, delay));
     }
   }
-  // 所有重试后仍失败，返回空用户
+
   console.warn('[Auth Retry] Auth failed after retries, returning null user');
   return { data: { user: null } };
+};
+
+const getUserWithRetry = async (maxRetries = 3): Promise<UserResult> => {
+  if (inFlightUserRequest) {
+    console.log('[Auth Retry] Reusing in-flight auth request');
+    return inFlightUserRequest;
+  }
+
+  inFlightUserRequest = getUserWithRetryInternal(maxRetries).finally(() => {
+    inFlightUserRequest = null;
+  });
+  return inFlightUserRequest;
 };
 
 /**
