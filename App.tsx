@@ -23,6 +23,7 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [pet, setPet] = useState<PetState | null>(null);
   const [stats, setStats] = useState<DailyStats | null>(null);
+  const [dailyNewWordsCount, setDailyNewWordsCount] = useState(0);
   const [reviewWords, setReviewWords] = useState<WordEntry[]>([]);
   const [reviewMode, setReviewMode] = useState<ReviewMode>('active');
   const [showPostcard, setShowPostcard] = useState<string | null>(null);
@@ -60,6 +61,7 @@ const App: React.FC = () => {
         console.log('[App] No session, user logged out');
         setPet(null);
         setStats(null);
+        setDailyNewWordsCount(0);
         return;
       }
 
@@ -109,11 +111,12 @@ const App: React.FC = () => {
   // --- 加载数据 ---
   const loadData = async () => {
     console.log('[App] loadData called');
-    const [loadedPet, loadedStats] = await Promise.all([getPetState(), getDailyStats()]);
+    const [loadedPet, loadedStats, loadedWords] = await Promise.all([getPetState(), getDailyStats(), getWords()]);
     console.log('[App] Pet loaded:', { name: loadedPet.name, stage: loadedPet.stage, xp: loadedPet.xp, imageUrls: loadedPet.imageUrls });
     console.log('[App] Stats loaded:', loadedStats);
     setPet(loadedPet);
     setStats(loadedStats);
+    setDailyNewWordsCount(getTodayNewWords(loadedWords).length);
   };
 
   // --- Initialization ---
@@ -198,6 +201,26 @@ const App: React.FC = () => {
     setIsLoggedIn(false);
     setPet(null);
     setStats(null);
+    setDailyNewWordsCount(0);
+  };
+
+  const getTodayNewWords = (allWords: WordEntry[]): WordEntry[] => {
+    const todayLocal = new Date().toLocaleDateString('en-CA');
+    return allWords.filter((word) => {
+      const localDate = new Date(word.addedAt).toLocaleDateString('en-CA');
+      const utcDate = new Date(word.addedAt).toISOString().split('T')[0];
+      return localDate === todayLocal || utcDate === todayLocal;
+    });
+  };
+
+  const refreshDailyNewWordCount = async () => {
+    try {
+      const allWords = await getWords();
+      setDailyNewWordsCount(getTodayNewWords(allWords).length);
+    } catch (error) {
+      console.error('[App] Failed to refresh daily new word count:', error);
+      setDailyNewWordsCount(0);
+    }
   };
 
   // --- Logic: Prepare Reviews ---
@@ -210,6 +233,7 @@ const App: React.FC = () => {
         new Promise<WordEntry[]>((_, reject) => setTimeout(() => reject(new Error('getWords timeout after 5000ms')), 5000))
       ]);
       console.log(`[Review] Total words: ${allWords.length}`);
+      setDailyNewWordsCount(getTodayNewWords(allWords).length);
     const today = new Date().toLocaleDateString('en-CA');
     console.log(`[Review] Today (local): ${today}`);
     console.log(`[Review] Today (UTC): ${new Date().toISOString().split('T')[0]}`);
@@ -230,15 +254,7 @@ const App: React.FC = () => {
           isTodayUTC: utcDate === today
         };
       }));
-      selection = allWords.filter(w => {
-        const localDate = new Date(w.addedAt).toLocaleDateString('en-CA');
-        const utcDate = new Date(w.addedAt).toISOString().split('T')[0];
-        const isMatchLocal = localDate === today;
-        const isMatchUTC = utcDate === today;
-        if (isMatchLocal) console.log(`[Review] Word "${w.word}" matches today (local ${localDate} === ${today})`);
-        else if (isMatchUTC) console.log(`[Review] Word "${w.word}" matches UTC date (${utcDate} === ${today})`);
-        return isMatchLocal || isMatchUTC; // Match either local or UTC date
-      });
+      selection = getTodayNewWords(allWords);
       setReviewMode('passive');
     } else {
       // Brain Gym: Due words (nextReviewDate <= today) regardless of reviewLevel
@@ -379,6 +395,7 @@ const App: React.FC = () => {
     const newStats = await getDailyStats();
     console.log('[App] Refreshing stats:', newStats);
     setStats(newStats);
+    await refreshDailyNewWordCount();
   };
 
   const handleReviewComplete = async (xp: number) => {
@@ -387,6 +404,7 @@ const App: React.FC = () => {
     updatePet({ ...pet, xp: newXp });
     await updateDailyStats({ reviewSessionDone: true });
     setStats(await getDailyStats());
+    await refreshDailyNewWordCount();
     await checkPetEvolution();
     setMode(AppMode.HOME);
 
@@ -548,7 +566,7 @@ const App: React.FC = () => {
                   <Book size={20} />
                 </div>
                 <h3 className="font-bold text-gray-800">Daily Review</h3>
-                <p className="text-xs text-gray-400 mt-1">Listen to {stats.wordsAdded} new words</p>
+                <p className="text-xs text-gray-400 mt-1">Listen to {dailyNewWordsCount} new words</p>
               </button>
 
               <button

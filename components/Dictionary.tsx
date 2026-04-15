@@ -70,35 +70,49 @@ const Dictionary: React.FC<DictionaryProps> = ({ onWordAdded }) => {
         };
         console.log('[Dictionary] Attempting to save word:', newWord.word, 'ID:', newWord.id, 'Full object:', JSON.stringify(newWord, null, 2));
 
+        let savedWordInfo: { id: string; isNew: boolean } | null = null;
         try {
           console.log('[Dictionary] Calling saveWord...');
-          await saveWord(newWord);
+          savedWordInfo = await saveWord(newWord);
           console.log('[Dictionary] saveWord completed successfully');
         } catch (saveError) {
           console.error('[Dictionary] saveWord failed:', saveError);
           throw saveError; // Re-throw to be caught by outer catch
         }
 
+        if (!savedWordInfo) {
+          throw new Error('saveWord returned empty result');
+        }
+
+        const persistedWordId = savedWordInfo.id;
+        const isNewWord = savedWordInfo.isNew;
+        console.log('[Dictionary] saveWord result:', { persistedWordId, isNewWord });
+
         // 异步生成图片（不阻塞文本显示）
         console.log('[Dictionary] Generating card image...');
         generateCardImage(newWord.word, newWord.context, newWord.visualDescription).then(imgUrl => {
             console.log('[Dictionary] Card image generated, updating word with image URL');
-            updateWord(newWord.id, {
-                todayImage: imgUrl,
-                todayImageDate: new Date().toISOString().split('T')[0]
+            updateWord(persistedWordId, {
+                todayImage: imgUrl
+            }).catch((imgPersistError) => {
+              console.error('[Dictionary] Failed to persist generated card image:', imgPersistError);
             });
         }).catch(imgError => {
           console.error('[Dictionary] Failed to generate card image:', imgError);
         });
 
-        console.log('[Dictionary] Updating daily stats...');
-        const currentStats = await getDailyStats();
-        console.log('[Dictionary] Current stats:', currentStats);
-        await updateDailyStats({ wordsAdded: (currentStats.wordsAdded || 0) + 1 });
-
-        setAdded(true);
-        console.log('[Dictionary] Calling onWordAdded callback');
-        onWordAdded();
+        if (isNewWord) {
+          console.log('[Dictionary] Updating daily stats for newly added word...');
+          const currentStats = await getDailyStats();
+          console.log('[Dictionary] Current stats:', currentStats);
+          await updateDailyStats({ wordsAdded: (currentStats.wordsAdded || 0) + 1 });
+          setAdded(true);
+          console.log('[Dictionary] Calling onWordAdded callback');
+          onWordAdded();
+        } else {
+          console.log('[Dictionary] Word already exists; skip wordsAdded increment and XP update');
+          setAdded(false);
+        }
         console.log('[Dictionary] Word added process completed');
       } else {
         console.warn('[Dictionary] queryDictionary returned null/undefined data');
@@ -221,3 +235,4 @@ const Dictionary: React.FC<DictionaryProps> = ({ onWordAdded }) => {
 };
 
 export default Dictionary;
+

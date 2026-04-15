@@ -507,7 +507,7 @@
         "控制台出现图片请求 504 与 30000ms timeout"
       ],
       "created_at": "2026-04-15 16:42",
-      "updated_at": "2026-04-15 17:40",
+      "updated_at": "2026-04-15 22:27",
       "history": [
         {
           "timestamp": "2026-04-15 16:42",
@@ -556,6 +556,75 @@
           "role": "System",
           "action": "test_result",
           "detail": "复测通过：npm run build 通过；npm run test:e2e 通过（3 passed, 3 skipped），其中 BUG7 回归用例稳定通过。"
+        },
+        {
+          "timestamp": "2026-04-15 22:25",
+          "role": "User",
+          "action": "feedback",
+          "detail": "Daily Review still cannot generate normal image, and browser console shows no obvious error."
+        },
+        {
+          "timestamp": "2026-04-15 22:25",
+          "role": "System",
+          "action": "test_result",
+          "detail": "Local checks passed: npm run build passed; npm run test:e2e passed (3 passed, 3 skipped), including BUG7 regression."
+        },
+        {
+          "timestamp": "2026-04-15 22:25",
+          "role": "AI",
+          "action": "implementation",
+          "detail": "ReviewSession now treats placeholder images as stale, retries generation, and swaps in real image when it arrives for the current word; Dictionary now persists image against the real saved word id."
+        },
+        {
+          "timestamp": "2026-04-15 22:25",
+          "role": "System",
+          "action": "status_update",
+          "detail": "Status changed from confirmed to confirmed"
+        },
+        {
+          "timestamp": "2026-04-15 22:27",
+          "role": "System",
+          "action": "status_update",
+          "detail": "Status changed from confirmed to confirmed"
+        }
+      ]
+    },
+    {
+      "id": "BUG8",
+      "title": "Notebook count and Daily Review count mismatch",
+      "status": "confirmed",
+      "priority": "high",
+      "description": "Notebook total words is much smaller, but Daily Review card shows a much larger new-word count.",
+      "reproduce_steps": [
+        "Open Notebook and note total words",
+        "Return Home and check Daily Review card count"
+      ],
+      "created_at": "2026-04-15 22:25",
+      "updated_at": "2026-04-15 22:26",
+      "history": [
+        {
+          "timestamp": "2026-04-15 22:25",
+          "role": "User",
+          "action": "reported",
+          "detail": "Notebook total words is much smaller, but Daily Review card shows a much larger new-word count."
+        },
+        {
+          "timestamp": "2026-04-15 22:26",
+          "role": "System",
+          "action": "status_update",
+          "detail": "Status changed from open to confirmed"
+        },
+        {
+          "timestamp": "2026-04-15 22:26",
+          "role": "AI",
+          "action": "implementation",
+          "detail": "App now computes Daily Review new-word count from words table (same source as Notebook), and saveWord returns isNew so repeated lookups no longer increase wordsAdded or XP."
+        },
+        {
+          "timestamp": "2026-04-15 22:26",
+          "role": "System",
+          "action": "test_result",
+          "detail": "Local checks passed: npm run build passed; npm run test:e2e passed (3 passed, 3 skipped)."
         }
       ]
     }

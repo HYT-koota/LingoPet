@@ -406,14 +406,13 @@ export const getWords = async (): Promise<WordEntry[]> => {
     reviewCount: w.review_count,
     nextReviewDate: new Date(w.next_review_date).getTime(),
     todayImage: w.image_url,
-    todayImageDate: new Date().toISOString().split('T')[0], // 如果有 image_url 认为是今天生成的
   }));
 
   console.log('[getWords] Mapped words:', words.map((w: WordEntry) => ({ word: w.word, addedAt: w.addedAt, reviewLevel: w.reviewLevel })));
   return words;
 };
 
-export const saveWord = async (newWord: WordEntry) => {
+export const saveWord = async (newWord: WordEntry): Promise<{ id: string; isNew: boolean }> => {
   console.log('[saveWord] Starting function for word:', newWord.word);
   try {
     console.log('[saveWord] Calling supabase.auth.getUser() with retry...');
@@ -492,6 +491,7 @@ export const saveWord = async (newWord: WordEntry) => {
       throw updateError;
     }
     console.log('[saveWord] Word updated successfully');
+    return { id: existing.id, isNew: false };
   } else {
     // 插入新单词
     console.log('[saveWord] Inserting new word with ID:', newWord.id);
@@ -514,6 +514,7 @@ export const saveWord = async (newWord: WordEntry) => {
       throw insertError;
     }
     console.log('[saveWord] Word inserted successfully');
+    return { id: newWord.id, isNew: true };
   }
   } catch (error) {
     console.error('[saveWord] Error in saveWord function:', error);
@@ -751,3 +752,4 @@ export const calculateNextReview = (currentLevel: number, wasCorrect: boolean): 
 
   return { level: nextLevel, date: nextDate.getTime() };
 };
+

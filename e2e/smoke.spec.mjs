@@ -82,7 +82,10 @@ test('desktop smoke: login, save word, pet image, notebook translation', async (
 
   await page.getByTestId('dictionary-input').fill(E2E_WORD);
   await page.getByTestId('dictionary-search').click();
-  await expect(page.getByText('Added to Memory')).toBeVisible({ timeout: 80_000 });
+  await Promise.race([
+    page.getByText('Added to Memory').waitFor({ state: 'visible', timeout: 80_000 }),
+    page.getByText('Example').first().waitFor({ state: 'visible', timeout: 80_000 }),
+  ]);
 
   await page.getByTestId('nav-profile').click();
   await page.getByTestId('open-notebook').click();

@@ -25,10 +25,15 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ words, mode, onComplete }
   const isPlayingRef = useRef(false);
   const mountedRef = useRef(true);
   const cleanupRef = useRef<(() => void) | null>(null);
+  const currentWordIdRef = useRef<string | null>(currentWord?.id || null);
 
   useEffect(() => {
       setSessionWords(words);
   }, [words]);
+
+  useEffect(() => {
+    currentWordIdRef.current = currentWord?.id || null;
+  }, [currentWord?.id]);
 
   useEffect(() => {
       // 组件挂载时设置mountedRef
@@ -101,6 +106,10 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ words, mode, onComplete }
   const getPlaceholderImage = (text: string): string => {
     const svg = `<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg"><rect width="512" height="512" fill="#F9FAFB"/><rect x="156" y="156" width="200" height="200" rx="40" fill="#FBBF24" opacity="0.2"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="20" fill="#FBBF24">${text}</text></svg>`;
     return `data:image/svg+xml;base64,${btoa(svg)}`;
+  };
+
+  const isPlaceholderImage = (url: string | null | undefined): boolean => {
+    return !!url && url.startsWith('data:image/svg+xml;base64,');
   };
 
   const speak = (text: string, rate = 0.9): Promise<void> => {
@@ -183,24 +192,34 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ words, mode, onComplete }
     setLoadingImage(true);
     setCurrentImage(null);
 
-    const today = new Date().toISOString().split('T')[0];
     let cachedImage = word.todayImage;
     let imageTask: Promise<string> | null = null;
-    const needsFreshImage = !cachedImage || word.todayImageDate !== today;
+    const needsFreshImage = !cachedImage || isPlaceholderImage(cachedImage);
 
     if (needsFreshImage) {
       console.log(`[runPassiveSequence] Start async image generation for word: ${word.word}`);
       imageTask = generateCardImage(word.word, word.context, word.visualDescription)
         .then((url) => {
-          updateWord(word.id, { todayImage: url, todayImageDate: today }).catch((error) => {
-            console.warn('[runPassiveSequence] Failed to persist generated image:', error);
-          });
+          if (!isPlaceholderImage(url)) {
+            updateWord(word.id, { todayImage: url }).catch((error) => {
+              console.warn('[runPassiveSequence] Failed to persist generated image:', error);
+            });
+          }
           return url;
         })
         .catch((error) => {
           console.error('[runPassiveSequence] Error generating image:', error);
           return getPlaceholderImage(word.word);
         });
+
+      imageTask.then((generatedUrl) => {
+        if (!mountedRef.current || !isPlayingRef.current) return;
+        if (currentWordIdRef.current !== word.id) return;
+        if (isPlaceholderImage(generatedUrl)) return;
+        setCurrentImage(generatedUrl);
+        setLoadingImage(false);
+        setShowImage(true);
+      });
     } else {
       console.log(`[runPassiveSequence] Using existing image: ${cachedImage?.substring(0, 100)}${cachedImage && cachedImage.length > 100 ? '...' : ''}`);
     }
@@ -228,7 +247,7 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ words, mode, onComplete }
     setCurrentImage(displayImage);
     setShowImage(true);
 
-    if (displayImage && !displayImage.startsWith('data:image/svg+xml;base64,')) {
+    if (displayImage && !isPlaceholderImage(displayImage)) {
       const loadedSuccessfully = await loadImage(displayImage);
       if (!loadedSuccessfully && mountedRef.current) {
         console.log('[runPassiveSequence] Image failed to load, using placeholder');
@@ -263,13 +282,17 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ words, mode, onComplete }
             setLoadingImage(true);
             setShowImage(false);
             let imgUrl = currentWord.todayImage;
-            if (!imgUrl) {
-                console.log(`[startSequence] No existing image, generating new one`);
+            if (!imgUrl || isPlaceholderImage(imgUrl)) {
+                console.log(`[startSequence] Missing/placeholder image, generating new one`);
                 try {
                   imgUrl = await generateCardImage(currentWord.word, currentWord.context, currentWord.visualDescription);
                   console.log(`[startSequence] Image generated: ${imgUrl ? imgUrl.substring(0, 100) + (imgUrl.length > 100 ? '...' : '') : 'NULL'}`);
-                  console.log(`[startSequence] Image is placeholder? ${imgUrl && imgUrl.startsWith('data:image/svg+xml;base64,') ? 'YES' : 'NO'}`);
-                  updateWord(currentWord.id, { todayImage: imgUrl, todayImageDate: new Date().toISOString().split('T')[0] });
+                  console.log(`[startSequence] Image is placeholder? ${imgUrl && isPlaceholderImage(imgUrl) ? 'YES' : 'NO'}`);
+                  if (!isPlaceholderImage(imgUrl)) {
+                    updateWord(currentWord.id, { todayImage: imgUrl }).catch((error) => {
+                      console.warn('[startSequence] Failed to persist generated image:', error);
+                    });
+                  }
                 } catch (error) {
                   console.error('[startSequence] Error generating image:', error);
                 }
