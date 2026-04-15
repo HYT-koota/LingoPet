@@ -6,8 +6,10 @@ type UserResult = { data: { user: any } };
 
 const AUTH_TIMEOUT_MS = 15000;
 const SESSION_FALLBACK_TIMEOUT_MS = 5000;
+const REFRESH_FALLBACK_TIMEOUT_MS = 10000;
 const BASE_DELAY_MS = 1000;
 let inFlightUserRequest: Promise<UserResult> | null = null;
+let inFlightRefreshFallback: Promise<any | null> | null = null;
 
 const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> => {
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -44,11 +46,49 @@ const getUserFromSessionFallback = async (): Promise<any | null> => {
   }
 };
 
+const getUserFromRefreshFallback = async (): Promise<any | null> => {
+  if (inFlightRefreshFallback) {
+    return inFlightRefreshFallback;
+  }
+
+  inFlightRefreshFallback = (async () => {
+    try {
+      const { data, error } = await withTimeout(
+        supabase.auth.refreshSession(),
+        REFRESH_FALLBACK_TIMEOUT_MS,
+        `auth.refreshSession() timeout after ${REFRESH_FALLBACK_TIMEOUT_MS}ms`
+      );
+      if (error) {
+        console.warn('[Auth Retry] refreshSession fallback failed:', error.message);
+        return null;
+      }
+      if (data.session?.user) {
+        console.log('[Auth Retry] Using refreshed session user as fallback');
+        return data.session.user;
+      }
+      return null;
+    } catch (error) {
+      console.warn('[Auth Retry] refreshSession fallback threw:', error);
+      return null;
+    } finally {
+      inFlightRefreshFallback = null;
+    }
+  })();
+
+  return inFlightRefreshFallback;
+};
+
 const getUserWithRetryInternal = async (maxRetries = 3): Promise<UserResult> => {
   const cachedUser = await getUserFromSessionFallback();
   if (cachedUser) {
     console.log('[Auth Retry] Using cached session user before network retry');
     return { data: { user: cachedUser } };
+  }
+
+  const refreshedUser = await getUserFromRefreshFallback();
+  if (refreshedUser) {
+    console.log('[Auth Retry] Using refreshed user before network retry');
+    return { data: { user: refreshedUser } };
   }
 
   for (let i = 0; i < maxRetries; i++) {
@@ -69,6 +109,8 @@ const getUserWithRetryInternal = async (maxRetries = 3): Promise<UserResult> => 
       if (result.data.user) return result;
       const fallbackUser = await getUserFromSessionFallback();
       if (fallbackUser) return { data: { user: fallbackUser } };
+      const fallbackRefreshedUser = await getUserFromRefreshFallback();
+      if (fallbackRefreshedUser) return { data: { user: fallbackRefreshedUser } };
 
       if (i < maxRetries - 1) {
         const exponentialDelay = BASE_DELAY_MS * Math.pow(2, i);
@@ -83,6 +125,8 @@ const getUserWithRetryInternal = async (maxRetries = 3): Promise<UserResult> => 
       console.error(`[Auth Retry] Attempt ${i + 1} failed ${startTime !== undefined ? `after ${elapsed}ms` : '(startTime not set)'}:`, error);
       const fallbackUser = await getUserFromSessionFallback();
       if (fallbackUser) return { data: { user: fallbackUser } };
+      const fallbackRefreshedUser = await getUserFromRefreshFallback();
+      if (fallbackRefreshedUser) return { data: { user: fallbackRefreshedUser } };
 
       if (i === maxRetries - 1) {
         console.warn('[Auth Retry] All attempts failed, returning null user');
@@ -369,7 +413,7 @@ export const saveWord = async (newWord: WordEntry) => {
 
   if (!userId) {
     console.error('[saveWord] No user ID found, cannot save word');
-    throw new Error('User not authenticated');
+    throw new Error('登录状态已失效，请重新登录后再试');
   }
 
   const wordData = {
