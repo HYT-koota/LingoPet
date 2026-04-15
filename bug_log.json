@@ -5,7 +5,7 @@
     {
       "id": "BUG-20260412-1",
       "title": "Preview 环境打不开（401）",
-      "status": "in_progress",
+      "status": "resolved",
       "priority": "high",
       "description": "用户反馈预览网址无法打开。命令复测预览域名返回 401，生产域名返回 200。",
       "reproduce_steps": [
@@ -14,7 +14,7 @@
         "控制台可能出现 /api/v6/deployments/.../turborepo-summary 404"
       ],
       "created_at": "2026-04-12 14:40",
-      "updated_at": "2026-04-12 15:48",
+      "updated_at": "2026-04-15 21:27",
       "history": [
         {
           "timestamp": "2026-04-12 14:40",
@@ -87,13 +87,25 @@
           "role": "System",
           "action": "context_switch",
           "detail": "Switched away to BUG-20260412-4"
+        },
+        {
+          "timestamp": "2026-04-15 21:27",
+          "role": "System",
+          "action": "test_result",
+          "detail": "2026-04-15复核：Vercel latest preview branch alias 返回HTTP 200（branchAlias 与最新deployment URL均可访问），原401问题已不可复现。"
+        },
+        {
+          "timestamp": "2026-04-15 21:27",
+          "role": "System",
+          "action": "status_update",
+          "detail": "Preview 401 no longer reproducible on current deployment; issue considered resolved."
         }
       ]
     },
     {
       "id": "BUG-20260412-2",
       "title": "宠物图片在电脑端/手机端加载失败",
-      "status": "in_progress",
+      "status": "resolved",
       "priority": "high",
       "description": "用户已登录，但宠物图片看不到；Daily Review 图片可加载。",
       "reproduce_steps": [
@@ -102,7 +114,7 @@
         "出现无图或加载失败"
       ],
       "created_at": "2026-04-12 14:40",
-      "updated_at": "2026-04-12 17:41",
+      "updated_at": "2026-04-15 21:27",
       "history": [
         {
           "timestamp": "2026-04-12 17:06",
@@ -163,13 +175,25 @@
           "role": "System",
           "action": "context_switch",
           "detail": "Switched away to BUG-20260412-6"
+        },
+        {
+          "timestamp": "2026-04-15 21:27",
+          "role": "System",
+          "action": "test_result",
+          "detail": "复核通过：桌面烟测稳定可见 pet-image，且宠物图失败时有占位图+重试恢复路径，不再出现空白卡死。"
+        },
+        {
+          "timestamp": "2026-04-15 21:27",
+          "role": "System",
+          "action": "status_update",
+          "detail": "Pet image loading/recovery path verified; bug resolved."
         }
       ]
     },
     {
       "id": "BUG-20260412-3",
       "title": "移动端底部导航过低且页面滚动异常",
-      "status": "open",
+      "status": "resolved",
       "priority": "high",
       "description": "iPhone Safari 底部三个按钮太靠下难以点击，页面上下滑动体验异常。",
       "reproduce_steps": [
@@ -178,8 +202,21 @@
         "尝试上下滑动页面"
       ],
       "created_at": "2026-04-12 14:40",
-      "updated_at": "2026-04-12 14:40",
-      "history": []
+      "updated_at": "2026-04-15 21:27",
+      "history": [
+        {
+          "timestamp": "2026-04-15 21:27",
+          "role": "System",
+          "action": "test_result",
+          "detail": "复核通过：本地移动端烟测通过（底部导航按钮均在可点区域内，主内容可滚动），并保留 safe-area padding 方案。"
+        },
+        {
+          "timestamp": "2026-04-15 21:27",
+          "role": "System",
+          "action": "status_update",
+          "detail": "Mobile bottom nav and scroll behavior verified with current layout; bug resolved."
+        }
+      ]
     },
     {
       "id": "BUG-20260412-4",
@@ -241,7 +278,7 @@
     {
       "id": "BUG-20260412-5",
       "title": "Preview 缺少 Text API Key 导致词典不可用",
-      "status": "confirmed",
+      "status": "resolved",
       "priority": "high",
       "description": "用户在分支别名链接测试时，Dictionary 报错 Missing VITE_TEXT_API_KEY；同时出现 auth.getUser timeout after 10000ms。",
       "reproduce_steps": [
@@ -250,7 +287,7 @@
         "控制台报 Missing VITE_TEXT_API_KEY"
       ],
       "created_at": "2026-04-12 16:10",
-      "updated_at": "2026-04-12 17:06",
+      "updated_at": "2026-04-15 21:27",
       "history": [
         {
           "timestamp": "2026-04-12 16:10",
@@ -317,6 +354,18 @@
           "role": "System",
           "action": "context_switch",
           "detail": "Switched away to BUG-20260412-2"
+        },
+        {
+          "timestamp": "2026-04-15 21:27",
+          "role": "System",
+          "action": "test_result",
+          "detail": "复核通过：预发桌面烟测中 Dictionary 搜词可完成并出现 Added to Memory，未再出现 Missing VITE_TEXT_API_KEY。"
+        },
+        {
+          "timestamp": "2026-04-15 21:27",
+          "role": "System",
+          "action": "status_update",
+          "detail": "Text API key path fixed via server proxy and preview flow verified; bug resolved."
         }
       ]
     },

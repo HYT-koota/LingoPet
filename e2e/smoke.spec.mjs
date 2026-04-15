@@ -4,8 +4,40 @@ const E2E_EMAIL = process.env.E2E_EMAIL?.trim();
 const E2E_PASSWORD = process.env.E2E_PASSWORD?.trim();
 const E2E_WORD = process.env.E2E_WORD?.trim() || 'vector';
 
+async function gotoAppWithRetry(page) {
+  const maxAttempts = 3;
+  let lastError;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const response = await page.goto('/', {
+        // `domcontentloaded` can hang on unstable remote networks; `commit` is enough
+        // because we validate app readiness via explicit UI locators below.
+        waitUntil: 'commit',
+        timeout: 45_000,
+      });
+
+      const status = response?.status?.();
+      if (status === 401) {
+        throw new Error('Preview entry returned HTTP 401 (deployment protection is blocking access).');
+      }
+
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt < maxAttempts) {
+        await page.waitForTimeout(2_000);
+      }
+    }
+  }
+
+  throw new Error(
+    `Failed to open app entry after ${maxAttempts} attempts: ${lastError instanceof Error ? lastError.message : String(lastError)}`
+  );
+}
+
 async function ensureLoggedIn(page) {
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await gotoAppWithRetry(page);
 
   const emailInput = page.locator('input[type="email"]').first();
   const homeNav = page.getByTestId('nav-home');
@@ -40,7 +72,10 @@ test('desktop smoke: login, save word, pet image, notebook translation', async (
   test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop-only smoke flow');
 
   await ensureLoggedIn(page);
-  await expect(page.getByTestId('pet-image')).toBeVisible({ timeout: 20_000 });
+  const petImage = page.getByTestId('pet-image');
+  await expect(petImage).toBeVisible({ timeout: 20_000 });
+  await page.waitForTimeout(2_000);
+  await expect(petImage).toBeVisible({ timeout: 10_000 });
 
   await page.getByTestId('nav-dictionary').click();
   await expect(page.getByTestId('dictionary-input')).toBeVisible({ timeout: 20_000 });
