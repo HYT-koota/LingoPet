@@ -1,0 +1,81 @@
+import { expect, test } from '@playwright/test';
+
+const E2E_EMAIL = process.env.E2E_EMAIL?.trim();
+const E2E_PASSWORD = process.env.E2E_PASSWORD?.trim();
+const E2E_WORD = process.env.E2E_WORD?.trim() || 'vector';
+
+async function ensureLoggedIn(page) {
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+
+  const emailInput = page.locator('input[type="email"]').first();
+  const onLoginPage = await emailInput.isVisible({ timeout: 3_000 }).catch(() => false);
+
+  if (!onLoginPage) {
+    await expect(page.getByTestId('nav-home')).toBeVisible({ timeout: 30_000 });
+    return;
+  }
+
+  if (!E2E_EMAIL || !E2E_PASSWORD) {
+    throw new Error(
+      'E2E detected login page but E2E_EMAIL/E2E_PASSWORD are missing. Set them in env or .env.e2e.'
+    );
+  }
+
+  await emailInput.fill(E2E_EMAIL);
+  await page.locator('input[type="password"]').first().fill(E2E_PASSWORD);
+  await page.locator('button[type="submit"]').first().click();
+
+  await expect(page.getByTestId('nav-home')).toBeVisible({ timeout: 45_000 });
+}
+
+test('desktop smoke: login, save word, pet image, notebook translation', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop-only smoke flow');
+
+  await ensureLoggedIn(page);
+  await expect(page.getByTestId('pet-image')).toBeVisible({ timeout: 20_000 });
+
+  await page.getByTestId('nav-dictionary').click();
+  await expect(page.getByTestId('dictionary-input')).toBeVisible({ timeout: 20_000 });
+
+  await page.getByTestId('dictionary-input').fill(E2E_WORD);
+  await page.getByTestId('dictionary-search').click();
+  await expect(page.getByText('Added to Memory')).toBeVisible({ timeout: 80_000 });
+
+  await page.getByTestId('nav-profile').click();
+  await page.getByTestId('open-notebook').click();
+
+  const firstTranslation = page.locator('[data-testid^="notebook-translation-"]').first();
+  await expect(firstTranslation).toBeVisible({ timeout: 30_000 });
+
+  const translationText = (await firstTranslation.innerText()).trim();
+  expect(translationText).not.toMatch(/learning|translating/i);
+});
+
+test('mobile smoke: bottom nav is tappable and content can scroll', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile-chromium', 'Mobile-only smoke flow');
+
+  await ensureLoggedIn(page);
+
+  const viewport = page.viewportSize();
+  expect(viewport).toBeTruthy();
+
+  for (const testId of ['nav-home', 'nav-dictionary', 'nav-profile']) {
+    const locator = page.getByTestId(testId);
+    await expect(locator).toBeVisible({ timeout: 20_000 });
+    const box = await locator.boundingBox();
+    expect(box, `${testId} has no bounding box`).toBeTruthy();
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+  }
+
+  const firstScrollable = page.locator('.app-main-scroll').first();
+  await expect(firstScrollable).toBeVisible({ timeout: 20_000 });
+
+  const scrolled = await firstScrollable.evaluate((node) => {
+    const before = node.scrollTop;
+    node.scrollTop = before + 200;
+    return node.scrollTop > before || node.scrollHeight > node.clientHeight;
+  });
+  expect(scrolled).toBeTruthy();
+});
+

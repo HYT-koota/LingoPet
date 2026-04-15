@@ -113,6 +113,7 @@ const PetNode: React.FC<PetNodeProps> = ({ pet, onClick, onImageError }) => {
                 </div>
             ) : displayImageUrl ? (
                 <img
+                    data-testid="pet-image"
                     src={displayImageUrl}
                     alt={pet.name}
                     className="w-full h-full object-contain animate-float drop-shadow-lg"

@@ -487,7 +487,7 @@ const App: React.FC = () => {
             )}
           </div>
           <div className="flex items-center gap-3">
-            <button onClick={handleLogout} className="text-gray-400 hover:text-red-500 transition-colors p-2" title="登出">
+            <button data-testid="logout-button" onClick={handleLogout} className="text-gray-400 hover:text-red-500 transition-colors p-2" title="登出">
               <LogOut size={18} />
             </button>
             <div className="flex items-center bg-white rounded-full shadow-sm border border-brand-100 px-3 py-1 gap-2">
@@ -589,6 +589,7 @@ const App: React.FC = () => {
       {mode !== AppMode.NOTEBOOK && mode !== AppMode.REVIEW && (
         <nav className="bg-white border-t border-gray-100 px-6 py-3 flex justify-around items-center pb-nav-safe shadow-[0_-4px_20px_rgba(0,0,0,0.03)] z-30">
           <button
+            data-testid="nav-home"
             onClick={() => setMode(AppMode.HOME)}
             className={`flex flex-col items-center gap-1 p-2 rounded-2xl transition-all ${mode === AppMode.HOME ? 'text-brand-600 bg-brand-50' : 'text-gray-400 hover:text-brand-400'}`}
           >
@@ -598,6 +599,7 @@ const App: React.FC = () => {
 
           {/* Floating Main Action Button */}
           <button
+            data-testid="nav-dictionary"
             onClick={() => setMode(AppMode.DICTIONARY)}
             className="relative -top-6 bg-brand-500 text-white p-4 rounded-full shadow-lg hover:bg-brand-600 hover:scale-105 transition-all border-4 border-brand-50"
           >
@@ -605,6 +607,7 @@ const App: React.FC = () => {
           </button>
 
           <button
+            data-testid="nav-profile"
             onClick={() => setMode(AppMode.PET_PROFILE)}
             className={`flex flex-col items-center gap-1 p-2 rounded-2xl transition-all ${mode === AppMode.PET_PROFILE ? 'text-brand-600 bg-brand-50' : 'text-gray-400 hover:text-brand-400'}`}
           >

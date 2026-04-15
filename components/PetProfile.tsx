@@ -62,6 +62,7 @@ const PetProfile: React.FC<PetProfileProps> = ({ pet, onOpenNotebook }) => {
       </div>
 
       <button
+        data-testid="open-notebook"
         onClick={onOpenNotebook}
         className="w-full bg-white p-6 rounded-3xl shadow-sm border border-brand-100 mb-6 flex justify-between items-center group hover:bg-brand-50 transition-colors"
       >

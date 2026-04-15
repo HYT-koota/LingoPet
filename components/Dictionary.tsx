@@ -125,6 +125,7 @@ const Dictionary: React.FC<DictionaryProps> = ({ onWordAdded }) => {
         <div className={`absolute -inset-1 bg-gradient-to-r from-brand-300 to-teal-200 rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-1000 ${isListening ? 'animate-pulse opacity-60' : ''}`}></div>
         <div className="relative flex items-center w-full bg-white rounded-2xl shadow-xl transition-all border border-brand-100/50 overflow-hidden">
             <input
+              data-testid="dictionary-input"
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -133,12 +134,14 @@ const Dictionary: React.FC<DictionaryProps> = ({ onWordAdded }) => {
               className="flex-1 bg-transparent pl-6 pr-2 py-5 outline-none text-xl text-gray-800 placeholder-gray-300 font-bold"
             />
             <button 
+              data-testid="dictionary-voice"
               onClick={startListening}
               className={`p-3 mr-2 rounded-xl transition-all ${isListening ? 'bg-red-50 text-red-500' : 'hover:bg-brand-50 text-brand-400'}`}
             >
               <Mic size={22} />
             </button>
             <button 
+              data-testid="dictionary-search"
               onClick={() => handleSearch()}
               disabled={isLoading}
               className="bg-brand-500 hover:bg-brand-600 text-white p-5 transition-all disabled:opacity-50"

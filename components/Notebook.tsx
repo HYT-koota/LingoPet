@@ -137,7 +137,7 @@ const Notebook: React.FC<NotebookProps> = ({ onBack }) => {
                       <div>
                         <h3 className="text-xl font-black text-gray-800 tracking-tight group-hover:text-brand-600 transition-colors">{word.word}</h3>
                         {/* Default View: Just Translation */}
-                        <p className="text-sm font-bold text-teal-600 mt-0.5">
+                        <p data-testid={`notebook-translation-${word.id}`} className="text-sm font-bold text-teal-600 mt-0.5">
                           {word.translation?.trim() || 'Translating...'}
                         </p>
                       </div>

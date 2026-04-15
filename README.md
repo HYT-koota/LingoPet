@@ -95,4 +95,20 @@ See [SiliconFlow Docs](https://docs.siliconflow.cn/cn/userguide/capabilities/ima
 npm run dev        # Start development server
 npm run build      # Build for production
 npm run preview    # Preview production build
+npm run test:e2e:install  # Install Playwright Chromium
+npm run test:e2e          # Run smoke E2E tests (desktop + mobile)
+npm run test:e2e:headed   # Run E2E with visible browser
+```
+
+## E2E Smoke Testing
+
+1. Copy `.env.e2e.example` to `.env.e2e`
+2. Fill `E2E_EMAIL` and `E2E_PASSWORD` with a dedicated test account
+3. Optional: set `E2E_BASE_URL` to your fixed Preview alias or Production URL  
+   (leave empty to run against local dev server)
+4. Run:
+
+```bash
+npm run test:e2e:install
+npm run test:e2e
 ```
