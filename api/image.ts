@@ -69,7 +69,8 @@ export default async function handler(req: any, res: any) {
         model,
         prompt,
         image_size: '512x512',
-        num_inference_steps: 20,
+        // Slightly lower steps to improve response latency and reduce timeout risk.
+        num_inference_steps: 16,
         guidance_scale: 7.5,
         num_images: 1,
       }),

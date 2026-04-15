@@ -540,6 +540,7 @@ const App: React.FC = () => {
             {/* Action Cards */}
             <div className="grid grid-cols-2 gap-4 mb-6 relative z-20">
               <button
+                data-testid="start-daily-review"
                 onClick={() => startReview('new')}
                 className="bg-white p-4 rounded-3xl shadow-sm hover:shadow-md transition-all border border-brand-100 cursor-pointer group text-left"
               >

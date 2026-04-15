@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "current_bug_id": "BUG-20260412-6",
+  "current_bug_id": "BUG7",
   "bugs": [
     {
       "id": "BUG-20260412-1",
@@ -323,12 +323,12 @@
     {
       "id": "BUG-20260412-6",
       "title": "saveWord 10秒超时与 auth.getUser 超时",
-      "status": "in_progress",
+      "status": "resolved",
       "priority": "high",
       "description": "用户在新增单词时出现 saveWord timeout after 10 seconds，同时控制台出现 auth.getUser timeout after 10000ms。",
       "reproduce_steps": [],
       "created_at": "2026-04-12 17:41",
-      "updated_at": "2026-04-15 15:31",
+      "updated_at": "2026-04-15 16:42",
       "history": [
         {
           "timestamp": "2026-04-12 17:41",
@@ -425,6 +425,88 @@
           "role": "System",
           "action": "test_result",
           "detail": "Validation passed: npm run test:e2e (desktop + mobile smoke passed) and npm run build passed after auth/session fixes."
+        },
+        {
+          "timestamp": "2026-04-15 16:42",
+          "role": "User",
+          "action": "feedback",
+          "detail": "BUG6验收通过。"
+        },
+        {
+          "timestamp": "2026-04-15 16:42",
+          "role": "System",
+          "action": "status_update",
+          "detail": "User accepted BUG-20260412-6 in preview verification."
+        },
+        {
+          "timestamp": "2026-04-15 16:42",
+          "role": "System",
+          "action": "context_switch",
+          "detail": "Switched away to BUG7"
+        }
+      ]
+    },
+    {
+      "id": "BUG7",
+      "title": "Daily Review 首词卡住且图片生成失败(504超时)",
+      "status": "confirmed",
+      "priority": "high",
+      "description": "Daily Review 点进去后停在第一个词不动，卡了很久；同时图片生成失败，控制台报 Failed to load resource: 504 和 Image API request timed out (30000ms)。",
+      "reproduce_steps": [
+        "进入 Daily Review",
+        "卡在第一个词长时间无响应",
+        "控制台出现图片请求 504 与 30000ms timeout"
+      ],
+      "created_at": "2026-04-15 16:42",
+      "updated_at": "2026-04-15 17:40",
+      "history": [
+        {
+          "timestamp": "2026-04-15 16:42",
+          "role": "User",
+          "action": "reported",
+          "detail": "Daily Review 点进去后停在第一个词不动，卡了很久；同时图片生成失败，控制台报 Failed to load resource: 504 和 Image API request timed out (30000ms)。"
+        },
+        {
+          "timestamp": "2026-04-15 16:42",
+          "role": "System",
+          "action": "context_switch",
+          "detail": "Set as current bug"
+        },
+        {
+          "timestamp": "2026-04-15 16:42",
+          "role": "System",
+          "action": "status_update",
+          "detail": "按用户要求采用简洁编号：后续以 BUG7 称呼。"
+        },
+        {
+          "timestamp": "2026-04-15 17:37",
+          "role": "AI",
+          "action": "implementation",
+          "detail": "ReviewSession 被动复习改为图片异步生成+1200ms限时等待，超时使用占位图继续流程；并为语音播放增加3000ms超时保险，避免浏览器语音回调缺失导致卡在首词。"
+        },
+        {
+          "timestamp": "2026-04-15 17:37",
+          "role": "System",
+          "action": "test_result",
+          "detail": "本地验证通过：新增 BUG7 回归用例（模拟 /api/image 慢10s后504）可从 1/x 正常推进到 2/x；全量 npm run test:e2e 通过（3 passed, 3 skipped）；npm run build 通过。"
+        },
+        {
+          "timestamp": "2026-04-15 17:37",
+          "role": "System",
+          "action": "status_update",
+          "detail": "BUG7 fix implemented and locally verified; waiting user preview acceptance."
+        },
+        {
+          "timestamp": "2026-04-15 17:40",
+          "role": "AI",
+          "action": "implementation",
+          "detail": "图片生成链路补充稳态优化：/api/image 与本地直连都将 num_inference_steps 从20降到16，降低超时概率。"
+        },
+        {
+          "timestamp": "2026-04-15 17:40",
+          "role": "System",
+          "action": "test_result",
+          "detail": "复测通过：npm run build 通过；npm run test:e2e 通过（3 passed, 3 skipped），其中 BUG7 回归用例稳定通过。"
         }
       ]
     }

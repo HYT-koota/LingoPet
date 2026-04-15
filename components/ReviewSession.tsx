@@ -22,15 +22,31 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ words, mode, onComplete }
 
   const currentWord = sessionWords[currentIndex];
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isPlayingRef = useRef(false); 
+  const isPlayingRef = useRef(false);
   const mountedRef = useRef(true);
+  const cleanupRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
       setSessionWords(words);
   }, [words]);
 
   useEffect(() => {
-      return () => { mountedRef.current = false; };
+      // 组件挂载时设置mountedRef
+      mountedRef.current = true;
+
+      // 组件卸载时的清理函数
+      const unmountCleanup = () => {
+          mountedRef.current = false;
+          if (timeoutRef.current) clearTimeout(timeoutRef.current);
+          window.speechSynthesis.cancel();
+      };
+
+      cleanupRef.current = unmountCleanup;
+
+      return () => {
+          unmountCleanup();
+          cleanupRef.current = null;
+      };
   }, []);
 
   // 检查语音合成可用性
@@ -65,24 +81,74 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ words, mode, onComplete }
     };
   }, []);
 
-  const loadImage = (url: string): Promise<void> => {
+  const loadImage = (url: string): Promise<boolean> => {
       return new Promise((resolve) => {
+          console.log(`[loadImage] Loading image: ${url.substring(0, 80)}${url.length > 80 ? '...' : ''}`);
           const img = new Image();
           img.src = url;
-          img.onload = () => resolve();
-          img.onerror = () => resolve();
+          img.onload = () => {
+            console.log('[loadImage] Image loaded successfully');
+            resolve(true);
+          };
+          img.onerror = (err) => {
+            console.error('[loadImage] Image failed to load:', err, 'URL:', url.substring(0, 100));
+            console.error('[loadImage] Full URL:', url);
+            resolve(false);
+          };
       });
+  };
+
+  const getPlaceholderImage = (text: string): string => {
+    const svg = `<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg"><rect width="512" height="512" fill="#F9FAFB"/><rect x="156" y="156" width="200" height="200" rx="40" fill="#FBBF24" opacity="0.2"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="20" fill="#FBBF24">${text}</text></svg>`;
+    return `data:image/svg+xml;base64,${btoa(svg)}`;
   };
 
   const speak = (text: string, rate = 0.9): Promise<void> => {
     return new Promise((resolve) => {
-      if (!mountedRef.current) return resolve();
-      const u = new SpeechSynthesisUtterance(text);
-      u.rate = rate;
-      u.lang = 'en-US';
-      u.onend = () => resolve();
-      u.onerror = () => resolve(); 
-      window.speechSynthesis.speak(u);
+      if (!mountedRef.current || !window.speechSynthesis) {
+        return resolve();
+      }
+
+      const voices = window.speechSynthesis.getVoices();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = rate;
+      utterance.lang = 'en-US';
+
+      const englishVoice = voices.find(v => v.lang.startsWith('en-'));
+      if (englishVoice) {
+        utterance.voice = englishVoice;
+      }
+
+      const speechTimeoutMs = 3000;
+      let settled = false;
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        if (timeoutId) clearTimeout(timeoutId);
+        resolve();
+      };
+
+      utterance.onend = finish;
+      utterance.onerror = finish;
+
+      try {
+        if (window.speechSynthesis.speaking) {
+          window.speechSynthesis.cancel();
+        }
+        window.speechSynthesis.speak(utterance);
+      } catch (error) {
+        console.error('[speak] Exception:', error);
+        finish();
+        return;
+      }
+
+      // Some browsers/headless environments may never fire onend/onerror.
+      timeoutId = setTimeout(() => {
+        console.warn(`[speak] Fallback timeout (${speechTimeoutMs}ms), continuing sequence`);
+        finish();
+      }, speechTimeoutMs);
     });
   };
 
@@ -103,53 +169,122 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ words, mode, onComplete }
   };
 
   const runPassiveSequence = async (word: WordEntry) => {
-    if (!isPlayingRef.current) return;
+    console.log(`[runPassiveSequence] Starting for word: ${word.word}`);
+    if (!mountedRef.current) {
+      console.log('[runPassiveSequence] Component not mounted, returning');
+      return;
+    }
+    if (!isPlayingRef.current) {
+      console.log('[runPassiveSequence] Not playing, returning');
+      return;
+    }
+
     setShowImage(false);
     setLoadingImage(true);
     setCurrentImage(null);
 
-    let imgUrl = word.todayImage;
     const today = new Date().toISOString().split('T')[0];
-    if (!imgUrl || word.todayImageDate !== today) {
-        imgUrl = await generateCardImage(word.word, word.context, word.visualDescription);
-        updateWord(word.id, { todayImage: imgUrl, todayImageDate: today });
+    let cachedImage = word.todayImage;
+    let imageTask: Promise<string> | null = null;
+    const needsFreshImage = !cachedImage || word.todayImageDate !== today;
+
+    if (needsFreshImage) {
+      console.log(`[runPassiveSequence] Start async image generation for word: ${word.word}`);
+      imageTask = generateCardImage(word.word, word.context, word.visualDescription)
+        .then((url) => {
+          updateWord(word.id, { todayImage: url, todayImageDate: today }).catch((error) => {
+            console.warn('[runPassiveSequence] Failed to persist generated image:', error);
+          });
+          return url;
+        })
+        .catch((error) => {
+          console.error('[runPassiveSequence] Error generating image:', error);
+          return getPlaceholderImage(word.word);
+        });
+    } else {
+      console.log(`[runPassiveSequence] Using existing image: ${cachedImage?.substring(0, 100)}${cachedImage && cachedImage.length > 100 ? '...' : ''}`);
     }
 
+    console.log(`[runPassiveSequence] Speaking word: ${word.word}`);
     await speak(word.word);
     if (!mountedRef.current || !isPlayingRef.current) return;
     await wait(500);
+    if (!mountedRef.current || !isPlayingRef.current) return;
+
+    let displayImage = cachedImage || null;
+    if (!displayImage && imageTask) {
+      const imageReadyTimeout = 1200;
+      displayImage = await Promise.race([
+        imageTask,
+        wait(imageReadyTimeout).then(() => null),
+      ]);
+      if (!displayImage) {
+        console.log(`[runPassiveSequence] Image not ready in ${imageReadyTimeout}ms, using placeholder`);
+        displayImage = getPlaceholderImage(word.word);
+      }
+    }
 
     setLoadingImage(false);
-    setCurrentImage(imgUrl);
+    setCurrentImage(displayImage);
     setShowImage(true);
-    await loadImage(imgUrl);
 
+    if (displayImage && !displayImage.startsWith('data:image/svg+xml;base64,')) {
+      const loadedSuccessfully = await loadImage(displayImage);
+      if (!loadedSuccessfully && mountedRef.current) {
+        console.log('[runPassiveSequence] Image failed to load, using placeholder');
+        setCurrentImage(getPlaceholderImage(word.word));
+      }
+    }
+
+    console.log(`[runPassiveSequence] Speaking word again: ${word.word}`);
     await speak(word.word);
     if (!mountedRef.current || !isPlayingRef.current) return;
     await wait(2500);
+    if (!mountedRef.current || !isPlayingRef.current) return;
 
-    // Passive count
+    console.log(`[runPassiveSequence] Updating review count for word: ${word.word}`);
     updateWord(word.id, { reviewCount: (word.reviewCount || 0) + 1 });
     handleNext();
   };
 
   const startSequence = () => {
-      if (!currentWord) return;
+      console.log(`[startSequence] Starting, mode: ${mode}, currentWord: ${currentWord?.word || 'none'}`);
+      if (!currentWord) {
+        console.log('[startSequence] No current word, returning');
+        return;
+      }
       if (mode === 'passive') {
+          console.log('[startSequence] Running passive sequence');
           runPassiveSequence(currentWord);
       } else {
+          console.log('[startSequence] Running active mode load');
           const load = async () => {
+            console.log(`[startSequence] Loading image for word: ${currentWord.word}`);
             setLoadingImage(true);
-            setShowImage(false); 
+            setShowImage(false);
             let imgUrl = currentWord.todayImage;
             if (!imgUrl) {
-                imgUrl = await generateCardImage(currentWord.word, currentWord.context, currentWord.visualDescription);
-                updateWord(currentWord.id, { todayImage: imgUrl, todayImageDate: new Date().toISOString().split('T')[0] });
+                console.log(`[startSequence] No existing image, generating new one`);
+                try {
+                  imgUrl = await generateCardImage(currentWord.word, currentWord.context, currentWord.visualDescription);
+                  console.log(`[startSequence] Image generated: ${imgUrl ? imgUrl.substring(0, 100) + (imgUrl.length > 100 ? '...' : '') : 'NULL'}`);
+                  console.log(`[startSequence] Image is placeholder? ${imgUrl && imgUrl.startsWith('data:image/svg+xml;base64,') ? 'YES' : 'NO'}`);
+                  updateWord(currentWord.id, { todayImage: imgUrl, todayImageDate: new Date().toISOString().split('T')[0] });
+                } catch (error) {
+                  console.error('[startSequence] Error generating image:', error);
+                }
+            } else {
+                console.log(`[startSequence] Using existing image: ${imgUrl.substring(0, 100)}${imgUrl.length > 100 ? '...' : ''}`);
             }
-            if (mountedRef.current) {
-                setCurrentImage(imgUrl);
+            // 在异步操作开始前捕获mounted状态
+            const isMounted = mountedRef.current;
+            if (isMounted) {
+                console.log(`[startSequence] Setting image and speaking: ${currentWord.word}`);
+                setCurrentImage(imgUrl || null);
                 setLoadingImage(false);
                 speak(currentWord.word);
+            } else {
+                console.log('[startSequence] Component not mounted, skipping');
             }
           }
           load();
@@ -166,6 +301,7 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ words, mode, onComplete }
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
     }
     return () => {
+        // 这个清理函数只清理资源，不修改mountedRef
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
         window.speechSynthesis.cancel();
     }
@@ -195,7 +331,7 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ words, mode, onComplete }
   return (
     <div className="flex flex-col h-full p-6 relative">
       <div className="flex justify-between items-center mb-4">
-          <span className="text-xs font-bold text-brand-400 uppercase tracking-wider">
+          <span data-testid="review-progress" className="text-xs font-bold text-brand-400 uppercase tracking-wider">
               {mode === 'passive' ? 'Daily Listen' : 'Active Recall'} • {currentIndex + 1}/{sessionWords.length}
           </span>
           <div className="flex gap-4">
@@ -220,7 +356,17 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ words, mode, onComplete }
                         <RotateCw className="animate-spin" />
                     </div>
                 ) : (
-                    currentImage && <img src={currentImage} alt="Visual" className="w-full h-full object-contain p-4" />
+                    currentImage && <img
+                      src={currentImage}
+                      alt="Visual"
+                      className="w-full h-full object-contain p-4"
+                      onError={(e) => {
+                        console.error('[Image] Failed to load:', currentImage.substring(0, 100));
+                        console.error('[Image] Error event:', e);
+                        // 可以在这里设置占位符图片，但需要访问setCurrentImage
+                        // 暂时只记录错误
+                      }}
+                    />
                 )}
             </div>
 
@@ -240,7 +386,11 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ words, mode, onComplete }
 
       <div className="h-24 flex items-center justify-center gap-8 mt-4">
          {mode === 'passive' && (
-             <button onClick={() => setIsPlaying(!isPlaying)} className={`w-20 h-20 rounded-full shadow-2xl border-4 border-white flex items-center justify-center ${isPlaying ? 'bg-brand-300 text-white' : 'bg-brand-500 text-white'}`}>
+             <button
+                data-testid="passive-play-toggle"
+                onClick={() => setIsPlaying(!isPlaying)}
+                className={`w-20 h-20 rounded-full shadow-2xl border-4 border-white flex items-center justify-center ${isPlaying ? 'bg-brand-300 text-white' : 'bg-brand-500 text-white'}`}
+             >
                 {isPlaying ? <Pause size={32} fill="currentColor" /> : <Play size={36} fill="currentColor" className="ml-1" />}
              </button>
          )}

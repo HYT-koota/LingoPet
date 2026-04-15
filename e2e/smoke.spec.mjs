@@ -99,3 +99,29 @@ test('mobile smoke: bottom nav is tappable and content can scroll', async ({ pag
   });
   expect(scrolled).toBeTruthy();
 });
+
+test('daily review keeps progressing when image API is slow/failing', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium', 'Desktop-only BUG7 regression flow');
+
+  await ensureLoggedIn(page);
+
+  await page.route('**/api/image', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 10_000));
+    await route.fulfill({
+      status: 504,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: false, error: 'Simulated timeout for BUG7 regression test' }),
+    });
+  });
+
+  await page.getByTestId('nav-home').click();
+  await page.getByTestId('start-daily-review').click();
+  await page.getByTestId('passive-play-toggle').click();
+
+  const reviewProgress = page.getByTestId('review-progress');
+  await expect(reviewProgress).toContainText(/1\//, { timeout: 20_000 });
+
+  // BUG7 regression assertion:
+  // even if image generation is slow/failing, passive review should not stay on the first word.
+  await expect(reviewProgress).toContainText(/2\//, { timeout: 12_000 });
+});

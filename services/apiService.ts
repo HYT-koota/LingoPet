@@ -198,7 +198,8 @@ async function callImageAPIDirect(prompt: string): Promise<string> {
           model: CURRENT_CONFIG.imageModel,
           prompt,
           image_size: '512x512',
-          num_inference_steps: 20,
+          // Keep direct-call behavior aligned with /api/image for better timeout resilience.
+          num_inference_steps: 16,
           guidance_scale: 7.5,
           num_images: 1,
         }),
