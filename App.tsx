@@ -40,49 +40,70 @@ const App: React.FC = () => {
 
   // --- 认证状态检查 ---
   useEffect(() => {
-    const checkAuth = async () => {
-      console.log('[App] Starting auth check...');
-      if (!SUPABASE_CONFIG.isConfigured) {
-        console.error('[App] Supabase env vars missing. Skip auth bootstrap.');
-        setIsLoggedIn(false);
-        setLoading(false);
+    console.log('[App] Starting auth check...');
+    if (!SUPABASE_CONFIG.isConfigured) {
+      console.error('[App] Supabase env vars missing. Skip auth bootstrap.');
+      setIsLoggedIn(false);
+      setLoading(false);
+      return;
+    }
+
+    let isDisposed = false;
+
+    const applySessionState = (session: any) => {
+      if (isDisposed) return;
+
+      const hasSession = !!session;
+      setIsLoggedIn(hasSession);
+
+      if (!hasSession) {
+        console.log('[App] No session, user logged out');
+        setPet(null);
+        setStats(null);
         return;
       }
 
-      // 先进行认证健康检查
+      // Keep auth callback synchronous to avoid Supabase auth deadlocks.
+      setTimeout(() => {
+        if (isDisposed) return;
+        console.log('[App] Session detected, loading data');
+        void loadData();
+      }, 0);
+    };
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('[App] Auth state changed:', event, 'session:', !!session);
+      applySessionState(session);
+    });
+
+    const bootstrapAuth = async () => {
       try {
         console.log('[App] Performing auth health check...');
         const healthStart = Date.now();
         const { data: { session } } = await supabase.auth.getSession();
         const healthElapsed = Date.now() - healthStart;
         console.log(`[App] Auth health check completed in ${healthElapsed}ms, session:`, !!session);
-
-        setIsLoggedIn(!!session);
-        setLoading(false);
+        applySessionState(session);
       } catch (healthError) {
         console.error('[App] Auth health check failed:', healthError);
-        setIsLoggedIn(false);
-        setLoading(false);
-        return;
-      }
-
-      // 监听认证状态变化
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-        console.log('[App] Auth state changed:', event, 'session:', !!session);
-        setIsLoggedIn(!!session);
-        if (session) {
-          // 登录后加载数据
-          console.log('[App] Session detected, loading data');
-          await loadData();
-        } else {
-          console.log('[App] No session, user logged out');
+        if (!isDisposed) {
+          setIsLoggedIn(false);
+          setPet(null);
+          setStats(null);
         }
-      });
-
-      return () => subscription?.unsubscribe();
+      } finally {
+        if (!isDisposed) {
+          setLoading(false);
+        }
+      }
     };
 
-    checkAuth();
+    void bootstrapAuth();
+
+    return () => {
+      isDisposed = true;
+      subscription?.unsubscribe();
+    };
   }, []);
 
   // --- 加载数据 ---

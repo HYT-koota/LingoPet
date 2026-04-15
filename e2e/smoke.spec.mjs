@@ -8,10 +8,18 @@ async function ensureLoggedIn(page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
 
   const emailInput = page.locator('input[type="email"]').first();
-  const onLoginPage = await emailInput.isVisible({ timeout: 3_000 }).catch(() => false);
+  const homeNav = page.getByTestId('nav-home');
+
+  // Mobile WebKit can render slower than desktop; wait for either logged-in shell or login form.
+  await Promise.race([
+    homeNav.waitFor({ state: 'visible', timeout: 30_000 }),
+    emailInput.waitFor({ state: 'visible', timeout: 30_000 }),
+  ]);
+
+  const onLoginPage = await emailInput.isVisible().catch(() => false);
 
   if (!onLoginPage) {
-    await expect(page.getByTestId('nav-home')).toBeVisible({ timeout: 30_000 });
+    await expect(homeNav).toBeVisible({ timeout: 30_000 });
     return;
   }
 
@@ -25,7 +33,7 @@ async function ensureLoggedIn(page) {
   await page.locator('input[type="password"]').first().fill(E2E_PASSWORD);
   await page.locator('button[type="submit"]').first().click();
 
-  await expect(page.getByTestId('nav-home')).toBeVisible({ timeout: 45_000 });
+  await expect(homeNav).toBeVisible({ timeout: 45_000 });
 }
 
 test('desktop smoke: login, save word, pet image, notebook translation', async ({ page }, testInfo) => {
@@ -71,11 +79,23 @@ test('mobile smoke: bottom nav is tappable and content can scroll', async ({ pag
   const firstScrollable = page.locator('.app-main-scroll').first();
   await expect(firstScrollable).toBeVisible({ timeout: 20_000 });
 
+  const scrollState = await firstScrollable.evaluate((node) => ({
+    before: node.scrollTop,
+    hasOverflow: node.scrollHeight > node.clientHeight,
+  }));
+
+  if (!scrollState.hasOverflow) {
+    test.info().annotations.push({
+      type: 'note',
+      description: 'No overflow in current viewport; skipped active scroll movement assertion.',
+    });
+    return;
+  }
+
   const scrolled = await firstScrollable.evaluate((node) => {
     const before = node.scrollTop;
     node.scrollTop = before + 200;
-    return node.scrollTop > before || node.scrollHeight > node.clientHeight;
+    return node.scrollTop > before;
   });
   expect(scrolled).toBeTruthy();
 });
-

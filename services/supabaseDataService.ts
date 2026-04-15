@@ -158,6 +158,19 @@ const getUserWithRetry = async (maxRetries = 3): Promise<UserResult> => {
   return inFlightUserRequest;
 };
 
+const forceSignOutOnAuthFailure = async () => {
+  try {
+    const { error } = await supabase.auth.signOut({ scope: 'local' });
+    if (error) {
+      console.warn('[Auth Retry] Failed to force local sign out after auth failure:', error.message);
+    } else {
+      console.warn('[Auth Retry] Forced local sign out after unrecoverable auth failure');
+    }
+  } catch (error) {
+    console.warn('[Auth Retry] force local sign out threw:', error);
+  }
+};
+
 /**
  * 综合连接健康检查
  * 检查认证、数据库连接和响应时间
@@ -413,6 +426,7 @@ export const saveWord = async (newWord: WordEntry) => {
 
   if (!userId) {
     console.error('[saveWord] No user ID found, cannot save word');
+    await forceSignOutOnAuthFailure();
     throw new Error('登录状态已失效，请重新登录后再试');
   }
 

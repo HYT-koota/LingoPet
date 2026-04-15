@@ -328,7 +328,7 @@
       "description": "用户在新增单词时出现 saveWord timeout after 10 seconds，同时控制台出现 auth.getUser timeout after 10000ms。",
       "reproduce_steps": [],
       "created_at": "2026-04-12 17:41",
-      "updated_at": "2026-04-12 17:47",
+      "updated_at": "2026-04-15 15:31",
       "history": [
         {
           "timestamp": "2026-04-12 17:41",
@@ -365,6 +365,66 @@
           "role": "System",
           "action": "test_result",
           "detail": "本地 npm run build 通过（新构建产物 index-DSy2y0AN.js）。"
+        },
+        {
+          "timestamp": "2026-04-12 22:03",
+          "role": "AI",
+          "action": "implementation",
+          "detail": "加固 getUserWithRetry：为 getSession fallback 增加 5000ms 超时，并加入 in-flight 单飞复用，避免并发 auth 调用导致 saveWord 卡住。"
+        },
+        {
+          "timestamp": "2026-04-12 22:03",
+          "role": "System",
+          "action": "test_result",
+          "detail": "本地执行 npm run build 通过（tsc + vite build）；未再出现编译错误。待线上/真机复测 saveWord 卡圈现象。"
+        },
+        {
+          "timestamp": "2026-04-12 22:05",
+          "role": "System",
+          "action": "test_result",
+          "detail": "已推送修复提交 c1c8ac9 到 feature/fix-remaining-bugs，触发 Vercel Preview 自动部署（状态待云端确认）。"
+        },
+        {
+          "timestamp": "2026-04-15 12:19",
+          "role": "User",
+          "action": "feedback",
+          "detail": "线上最新日志：saveWord No user ID found -> User not authenticated（不再是超时，转为会话用户为空）。"
+        },
+        {
+          "timestamp": "2026-04-15 12:19",
+          "role": "AI",
+          "action": "implementation",
+          "detail": "新增 refreshSession 兜底认证：getSession/getUser 无用户时自动尝试 refreshSession（带超时和单飞），并把 saveWord 未登录报错改为中文可操作提示。"
+        },
+        {
+          "timestamp": "2026-04-15 12:19",
+          "role": "System",
+          "action": "test_result",
+          "detail": "本地 npm run build 通过；本轮改动聚焦认证链路，不影响其他功能编译。待线上复测 saveWord 与登录态连续性。"
+        },
+        {
+          "timestamp": "2026-04-15 13:03",
+          "role": "AI",
+          "action": "implementation",
+          "detail": "Refactored App auth state flow to keep onAuthStateChange callback synchronous and defer loadData, and force local sign-out when saveWord cannot recover user session."
+        },
+        {
+          "timestamp": "2026-04-15 13:03",
+          "role": "System",
+          "action": "test_result",
+          "detail": "Local validation passed: npm run build (tsc + vite build) succeeded after the auth/session fixes."
+        },
+        {
+          "timestamp": "2026-04-15 15:31",
+          "role": "AI",
+          "action": "implementation",
+          "detail": "Stabilized Playwright ensureLoggedIn and mobile scroll assertion logic so smoke tests can reliably validate BUG-6 without false negatives."
+        },
+        {
+          "timestamp": "2026-04-15 15:31",
+          "role": "System",
+          "action": "test_result",
+          "detail": "Validation passed: npm run test:e2e (desktop + mobile smoke passed) and npm run build passed after auth/session fixes."
         }
       ]
     }
