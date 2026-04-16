@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Mic, Search, Loader2, CheckCircle, Sparkles, BrainCircuit } from 'lucide-react';
-import { queryDictionary, generateCardImage } from '../services/apiService';
+import { queryDictionary, generateCardImage, isPlaceholderImageUrl } from '../services/apiService';
 import { saveWord, updateWord, updateDailyStats, getDailyStats } from '../services/supabaseDataService';
 import { WordEntry } from '../types';
 
@@ -91,6 +91,10 @@ const Dictionary: React.FC<DictionaryProps> = ({ onWordAdded }) => {
         // 异步生成图片（不阻塞文本显示）
         console.log('[Dictionary] Generating card image...');
         generateCardImage(newWord.word, newWord.context, newWord.visualDescription).then(imgUrl => {
+            if (isPlaceholderImageUrl(imgUrl)) {
+              console.log('[Dictionary] Generated placeholder image; skip persistence to keep retry path clean');
+              return;
+            }
             console.log('[Dictionary] Card image generated, updating word with image URL');
             updateWord(persistedWordId, {
                 todayImage: imgUrl

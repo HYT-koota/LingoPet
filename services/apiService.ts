@@ -44,6 +44,10 @@ function normalizeImageUrl(rawUrl: string): string {
   return trimmed;
 }
 
+export function isPlaceholderImageUrl(url: string | null | undefined): boolean {
+  return !!url && url.startsWith('data:image/svg+xml;base64,');
+}
+
 async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit, timeoutMs: number): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -88,7 +92,9 @@ async function callTextViaProxy(messages: ChatMessage[], jsonMode: boolean): Pro
   return payload.data;
 }
 
-async function callImageViaProxy(prompt: string): Promise<string> {
+let warnedImageQuotaExhausted = false;
+
+async function callImageViaProxy(prompt: string, fallbackText: string): Promise<string> {
   const timeoutMs = 35000;
   let response: Response;
   try {
@@ -97,7 +103,7 @@ async function callImageViaProxy(prompt: string): Promise<string> {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({ prompt, fallbackText }),
       },
       timeoutMs
     );
@@ -124,6 +130,13 @@ async function callImageViaProxy(prompt: string): Promise<string> {
   if (!imageUrl || typeof imageUrl !== 'string') {
     throw new Error('Image proxy returned no URL');
   }
+
+  const degradedReason = payload?.meta?.reason;
+  if (degradedReason === 'quota_exhausted' && !warnedImageQuotaExhausted) {
+    warnedImageQuotaExhausted = true;
+    console.warn('[apiService] Image generation is degraded because the upstream account balance is insufficient. Showing placeholders.');
+  }
+
   return normalizeImageUrl(imageUrl);
 }
 
@@ -238,9 +251,9 @@ async function callOpenAITextAPI(messages: ChatMessage[], jsonMode: boolean = tr
   }
 }
 
-async function callImageAPI(prompt: string): Promise<string> {
+async function callImageAPI(prompt: string, fallbackText: string): Promise<string> {
   try {
-    return await callImageViaProxy(prompt);
+    return await callImageViaProxy(prompt, fallbackText);
   } catch (proxyError) {
     if (isLocalDev && CURRENT_CONFIG.hasDirectImageKey) {
       console.warn('[apiService] /api/image unavailable in local dev, falling back to direct image API call.');
@@ -290,7 +303,7 @@ export const generateShortTranslation = async (word: string, definition?: string
 export const generateCardImage = async (word: string, context?: string, visualDescription?: string): Promise<string> => {
   try {
     const prompt = `3D digital art: ${word}. ${visualDescription || context}. White background, simple background, high quality.`;
-    return await callImageAPI(prompt);
+    return await callImageAPI(prompt, word || 'Word');
   } catch (error) {
     console.error('[generateCardImage] Image failed:', error);
     return getPlaceholder(word, '#FBBF24');
@@ -301,7 +314,7 @@ export const generatePetSprite = async (stage: number): Promise<string> => {
   const stages = ['mystical glowing egg', 'cute baby creature', 'teen creature', 'mighty guardian character'];
   const prompt = `Cute 3D ${stages[stage]}, character design, white background, simple background, high quality, centered.`;
   try {
-    return await callImageAPI(prompt);
+    return await callImageAPI(prompt, 'Pet');
   } catch (error) {
     console.error(`[generatePetSprite] Failed for stage ${stage}:`, error);
     return getPlaceholder('Pet', '#FCD34D');
@@ -327,7 +340,7 @@ export const generatePetReaction = async (petState: any, stats: any, trigger: st
 export const generatePostcard = async (petName: string): Promise<string> => {
   const prompt = `Anime style postcard illustration of ${petName} at a beautiful landmark, travel postcard, white background.`;
   try {
-    return await callImageAPI(prompt);
+    return await callImageAPI(prompt, petName || 'Postcard');
   } catch {
     return getPlaceholder('Postcard', '#6366F1');
   }

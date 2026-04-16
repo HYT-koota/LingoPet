@@ -1,5 +1,6 @@
 type ImageRequestBody = {
   prompt?: string;
+  fallbackText?: string;
 };
 
 function sendJson(res: any, status: number, payload: unknown) {
@@ -31,6 +32,39 @@ function normalizeImageUrl(rawUrl: string): string {
   return trimmed;
 }
 
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function buildPlaceholderImage(text: string, color: string = '#FBBF24'): string {
+  const safeText = escapeXml((text || 'Image').trim().slice(0, 18) || 'Image');
+  const svg = `<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg"><rect width="512" height="512" fill="#F9FAFB"/><rect x="156" y="156" width="200" height="200" rx="40" fill="${color}" opacity="0.2"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-size="20" fill="${color}">${safeText}</text></svg>`;
+  return `data:image/svg+xml;base64,${Buffer.from(svg, 'utf8').toString('base64')}`;
+}
+
+function parseUpstreamErrorBody(errorBody: string): any {
+  try {
+    return JSON.parse(errorBody);
+  } catch {
+    return null;
+  }
+}
+
+function isQuotaExhausted(status: number, parsedBody: any, errorBody: string): boolean {
+  if (status !== 403) return false;
+
+  const code = parsedBody?.code;
+  if (code === 30001) return true;
+
+  const msg = String(parsedBody?.message || errorBody || '').toLowerCase();
+  return msg.includes('insufficient') || msg.includes('balance');
+}
+
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
@@ -39,6 +73,7 @@ export default async function handler(req: any, res: any) {
 
   const body = normalizeBody(req.body);
   const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
+  const fallbackText = typeof body.fallbackText === 'string' ? body.fallbackText.trim() : 'Image';
   if (!prompt) {
     return sendJson(res, 400, { ok: false, error: 'Invalid request body: prompt is required.' });
   }
@@ -79,6 +114,18 @@ export default async function handler(req: any, res: any) {
 
     if (!response.ok) {
       const errorBody = await response.text();
+      const parsedErrorBody = parseUpstreamErrorBody(errorBody);
+
+      // Quota/balance exhaustion is an operational condition, not a user input failure.
+      // Return a placeholder image so review flow keeps moving on all clients.
+      if (isQuotaExhausted(response.status, parsedErrorBody, errorBody)) {
+        return sendJson(res, 200, {
+          ok: true,
+          data: { url: buildPlaceholderImage(fallbackText || 'Image') },
+          meta: { degraded: true, reason: 'quota_exhausted' },
+        });
+      }
+
       return sendJson(res, 502, {
         ok: false,
         error: `Upstream image API failed [${response.status}]: ${errorBody.substring(0, 200)}`,
