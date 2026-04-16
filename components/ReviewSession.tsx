@@ -19,6 +19,7 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ words, mode, onComplete }
   const [currentImage, setCurrentImage] = useState<string | null>(null);
   const [loadingImage, setLoadingImage] = useState(false);
   const [speechAvailable, setSpeechAvailable] = useState<boolean>(true);
+  const isActiveMode = mode === 'active';
 
   const currentWord = sessionWords[currentIndex];
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -369,8 +370,8 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ words, mode, onComplete }
   if (!currentWord) return null;
 
   return (
-    <div className="flex flex-col h-full p-6 relative">
-      <div className="flex justify-between items-center mb-4">
+    <div className={`flex flex-col h-full min-h-0 relative overflow-hidden ${isActiveMode ? 'p-3 md:p-4' : 'p-6'}`}>
+      <div className={`flex justify-between items-center ${isActiveMode ? 'mb-2 md:mb-3' : 'mb-4'}`}>
           <span data-testid="review-progress" className="text-xs font-bold text-brand-400 uppercase tracking-wider">
               {mode === 'passive' ? 'Daily Listen' : 'Active Recall'} • {currentIndex + 1}/{sessionWords.length}
           </span>
@@ -384,13 +385,13 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ words, mode, onComplete }
           </div>
       </div>
       
-      <div className="w-full bg-gray-100 h-3 rounded-full mb-6 overflow-hidden">
+      <div className={`w-full bg-gray-100 h-3 rounded-full overflow-hidden ${isActiveMode ? 'mb-3 md:mb-4' : 'mb-6'}`}>
         <div className="bg-brand-400 h-full transition-all duration-500" style={{ width: `${((currentIndex) / sessionWords.length) * 100}%` }} />
       </div>
 
-      <div className="flex-1 relative">
-        <div className="w-full h-full bg-white rounded-[2rem] shadow-xl border border-gray-100 flex flex-col overflow-hidden">
-            <div className={`h-3/5 relative bg-gray-50 transition-opacity duration-700 ${showImage || mode === 'active' ? 'opacity-100' : 'opacity-0'}`}>
+      <div className="flex-1 min-h-0 relative">
+        <div className="w-full h-full min-h-0 bg-white rounded-[2rem] shadow-xl border border-gray-100 flex flex-col overflow-hidden">
+            <div className={`${isActiveMode ? 'h-1/2' : 'h-3/5'} relative bg-gray-50 transition-opacity duration-700 ${showImage || mode === 'active' ? 'opacity-100' : 'opacity-0'}`}>
                 {loadingImage ? (
                     <div className="absolute inset-0 flex items-center justify-center text-brand-300">
                         <RotateCw className="animate-spin" />
@@ -410,12 +411,12 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ words, mode, onComplete }
                 )}
             </div>
 
-            <div className="h-2/5 p-4 flex flex-col items-center justify-start text-center bg-white">
-                <h2 className="text-4xl font-black text-gray-800 mb-2">{currentWord.word}</h2>
-                <div className={`transition-all duration-500 ${(showImage || mode === 'active') ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+            <div className={`${isActiveMode ? 'h-1/2 p-3 md:p-4' : 'h-2/5 p-4'} flex flex-col items-center justify-start text-center bg-white overflow-hidden`}>
+                <h2 className={`${isActiveMode ? 'text-3xl md:text-4xl mb-1' : 'text-4xl mb-2'} font-black text-gray-800`}>{currentWord.word}</h2>
+                <div className={`transition-all duration-500 overflow-y-auto w-full ${(showImage || mode === 'active') ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
                    {(showImage || mode === 'active') && (
                      <>
-                        <p className="text-lg font-medium text-gray-600 leading-snug mb-1">{currentWord.definition}</p>
+                        <p className={`${isActiveMode ? 'text-base md:text-lg' : 'text-lg'} font-medium text-gray-600 leading-snug mb-1`}>{currentWord.definition}</p>
                         <p className="text-xs text-gray-400 italic">"{currentWord.context}"</p>
                      </>
                    )}
@@ -424,7 +425,7 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ words, mode, onComplete }
         </div>
       </div>
 
-      <div className="h-24 flex items-center justify-center gap-8 mt-4">
+      <div className={`${isActiveMode ? 'h-20 md:h-16 mt-2 md:mt-3' : 'h-24 mt-4'} shrink-0 flex items-center justify-center gap-8`}>
          {mode === 'passive' && (
              <button
                 data-testid="passive-play-toggle"
@@ -435,15 +436,15 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ words, mode, onComplete }
              </button>
          )}
          {mode === 'active' && (
-            <div className="w-full px-8 flex justify-between items-center">
-                 <button onClick={() => handleRate(false)} className="w-16 h-16 rounded-full bg-white shadow-lg text-red-400 border border-red-100 flex items-center justify-center">
-                     <X size={32} strokeWidth={3} />
+            <div className="w-full max-w-xl mx-auto px-2 md:px-4 flex justify-between items-center">
+                 <button onClick={() => handleRate(false)} className="w-14 h-14 md:w-12 md:h-12 rounded-full bg-white shadow-lg text-red-400 border border-red-100 flex items-center justify-center">
+                     <X size={28} strokeWidth={3} />
                  </button>
-                 <button onClick={() => speak(currentWord.word)} className="w-12 h-12 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center">
+                 <button onClick={() => speak(currentWord.word)} className="w-11 h-11 md:w-10 md:h-10 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center">
                     <Play size={20} fill="currentColor" />
                  </button>
-                 <button onClick={() => handleRate(true)} className="w-16 h-16 rounded-full bg-green-500 text-white shadow-lg flex items-center justify-center">
-                     <Check size={32} strokeWidth={3} />
+                 <button onClick={() => handleRate(true)} className="w-14 h-14 md:w-12 md:h-12 rounded-full bg-green-500 text-white shadow-lg flex items-center justify-center">
+                     <Check size={28} strokeWidth={3} />
                  </button>
             </div>
          )}
