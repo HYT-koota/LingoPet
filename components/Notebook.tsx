@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Search, Calendar, BookOpen, Clock, BarChart3 } from 'lucide-react';
+import { ArrowLeft, Search, Calendar, BookOpen, Clock, BarChart3, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { WordEntry } from '../types';
-import { generateShortTranslation } from '../services/apiService';
+import { generateCardImage, generateShortTranslation, isPlaceholderImageUrl } from '../services/apiService';
 import { getWords, updateWord } from '../services/supabaseDataService';
 
 interface NotebookProps {
@@ -14,6 +14,8 @@ const Notebook: React.FC<NotebookProps> = ({ onBack }) => {
   const [words, setWords] = useState<WordEntry[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [imageLoadingIds, setImageLoadingIds] = useState<Record<string, boolean>>({});
+  const [imageErrorIds, setImageErrorIds] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     let isCancelled = false;
@@ -68,6 +70,46 @@ const Notebook: React.FC<NotebookProps> = ({ onBack }) => {
   const toggleExpand = (id: string) => {
     setExpandedId(expandedId === id ? null : id);
   };
+
+  const hasUsableImage = (url?: string) => !!url && !isPlaceholderImageUrl(url);
+
+  const generateNotebookImage = async (word: WordEntry) => {
+    if (imageLoadingIds[word.id]) return;
+
+    setImageLoadingIds(prev => ({ ...prev, [word.id]: true }));
+    setImageErrorIds(prev => ({ ...prev, [word.id]: false }));
+
+    try {
+      const imageUrl = await generateCardImage(word.word, word.context, word.visualDescription);
+      if (!hasUsableImage(imageUrl)) {
+        throw new Error('Image generation returned a placeholder');
+      }
+
+      await updateWord(word.id, { todayImage: imageUrl });
+      setWords(prevWords =>
+        prevWords.map(prevWord =>
+          prevWord.id === word.id ? { ...prevWord, todayImage: imageUrl } : prevWord
+        )
+      );
+    } catch (error) {
+      console.warn(`[Notebook] Failed to generate image for "${word.word}":`, error);
+      setImageErrorIds(prev => ({ ...prev, [word.id]: true }));
+    } finally {
+      setImageLoadingIds(prev => ({ ...prev, [word.id]: false }));
+    }
+  };
+
+  useEffect(() => {
+    if (!expandedId) return;
+
+    const expandedWord = words.find(word => word.id === expandedId);
+    if (!expandedWord) return;
+    if (hasUsableImage(expandedWord.todayImage)) return;
+    if (imageLoadingIds[expandedWord.id]) return;
+    if (imageErrorIds[expandedWord.id]) return;
+
+    void generateNotebookImage(expandedWord);
+  }, [expandedId, words, imageLoadingIds, imageErrorIds]);
 
   const getReviewColor = (level: number) => {
     if (level === 0) return 'bg-gray-100 text-gray-400';
@@ -159,28 +201,71 @@ const Notebook: React.FC<NotebookProps> = ({ onBack }) => {
                   </div>
 
                   {/* Expanded Details: English Explanation + Context */}
-                  <div className={`transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-[500px] opacity-100 border-t border-gray-50 bg-brand-50/20' : 'max-h-0 opacity-0 invisible'}`}>
-                    <div className="p-5 space-y-4">
-                      <div className="bg-white/60 rounded-2xl p-4 border border-brand-100/50">
-                        <span className="text-[10px] font-black text-brand-400 uppercase tracking-widest block mb-1.5 flex items-center gap-1">
-                          <BookOpen size={10} /> English Definition
-                        </span>
-                        <p className="text-sm text-gray-700 leading-relaxed font-semibold">{word.definition}</p>
-                      </div>
+                  <div className={`transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-[680px] opacity-100 border-t border-gray-50 bg-brand-50/20' : 'max-h-0 opacity-0 invisible'}`}>
+                    <div className="p-5">
+                      <div className="grid grid-cols-[minmax(0,1fr)_8.5rem] sm:grid-cols-[minmax(0,1fr)_11rem] gap-4">
+                        <div className="space-y-4 min-w-0">
+                          <div className="bg-white/60 rounded-2xl p-4 border border-brand-100/50">
+                            <span className="text-[10px] font-black text-brand-400 uppercase tracking-widest block mb-1.5 flex items-center gap-1">
+                              <BookOpen size={10} /> English Definition
+                            </span>
+                            <p className="text-sm text-gray-700 leading-relaxed font-semibold">{word.definition}</p>
+                          </div>
 
-                      <div className="bg-white/60 rounded-2xl p-4 border border-brand-100/50">
-                        <span className="text-[10px] font-black text-brand-400 uppercase tracking-widest block mb-1.5 flex items-center gap-1">
-                          <Clock size={10} /> In Context
-                        </span>
-                        <p className="text-sm text-gray-600 italic font-medium leading-relaxed">"{word.context}"</p>
-                      </div>
+                          <div className="bg-white/60 rounded-2xl p-4 border border-brand-100/50">
+                            <span className="text-[10px] font-black text-brand-400 uppercase tracking-widest block mb-1.5 flex items-center gap-1">
+                              <Clock size={10} /> In Context
+                            </span>
+                            <p className="text-sm text-gray-600 italic font-medium leading-relaxed">"{word.context}"</p>
+                          </div>
 
-                      <div className="flex items-center justify-between pt-2">
-                        <div className="flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase tracking-tighter">
-                          <Calendar size={10} /> Collected {addedDate}
+                          <div className="flex items-center justify-between pt-1">
+                            <div className="flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase tracking-tighter">
+                              <Calendar size={10} /> Collected {addedDate}
+                            </div>
+                            <div className="text-[10px] font-bold text-brand-400 italic">
+                              Keep going! You're doing great.
+                            </div>
+                          </div>
                         </div>
-                        <div className="text-[10px] font-bold text-brand-400 italic">
-                          Keep going! You're doing great.
+
+                        <div className="bg-white/60 rounded-2xl border border-brand-100/50 p-2 flex flex-col">
+                          <span className="text-[10px] font-black text-brand-400 uppercase tracking-widest px-1 pb-2">Word Image</span>
+                          {hasUsableImage(word.todayImage) ? (
+                            <img
+                              src={word.todayImage}
+                              alt={`${word.word} visual`}
+                              className="w-full flex-1 min-h-[8.5rem] rounded-xl object-cover bg-gray-100"
+                              onError={() => {
+                                setWords(prevWords =>
+                                  prevWords.map(prevWord =>
+                                    prevWord.id === word.id ? { ...prevWord, todayImage: undefined } : prevWord
+                                  )
+                                );
+                                setImageErrorIds(prev => ({ ...prev, [word.id]: true }));
+                              }}
+                            />
+                          ) : imageLoadingIds[word.id] ? (
+                            <div className="w-full flex-1 min-h-[8.5rem] rounded-xl bg-gradient-to-br from-brand-50 to-teal-50 border border-brand-100 flex flex-col items-center justify-center gap-2 px-3 text-center">
+                              <Loader2 size={20} className="text-brand-500 animate-spin" />
+                              <p className="text-[11px] font-bold text-brand-500 leading-snug">Generating image...</p>
+                            </div>
+                          ) : (
+                            <div className="w-full flex-1 min-h-[8.5rem] rounded-xl bg-gradient-to-br from-brand-50 to-teal-50 border border-brand-100 flex flex-col items-center justify-center gap-2 px-3 text-center">
+                              <ImageIcon size={18} className="text-brand-400" />
+                              <p className="text-[11px] font-bold text-brand-500 leading-snug">{imageErrorIds[word.id] ? 'Image not ready' : word.word}</p>
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void generateNotebookImage(word);
+                                }}
+                                className="rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase tracking-wider text-brand-600 shadow-sm border border-brand-100 hover:bg-brand-50"
+                              >
+                                Generate
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
