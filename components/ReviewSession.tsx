@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { WordEntry, ReviewMode } from '../types';
 import { generateCardImage } from '../services/apiService';
 import { updateWord, calculateNextReview } from '../services/supabaseDataService';
-import { Play, Pause, Check, X, RotateCw, Shuffle } from 'lucide-react';
+import { Play, Pause, Check, X, RotateCw, Shuffle, ListFilter, ChevronDown } from 'lucide-react';
 
 interface ReviewSessionProps {
   words: WordEntry[];
@@ -11,8 +11,19 @@ interface ReviewSessionProps {
   onComplete: (xpEarned: number) => void;
 }
 
+const ACTIVE_SESSION_LIMIT_OPTIONS = [15, 30, 50] as const;
+type ActiveSessionLimit = typeof ACTIVE_SESSION_LIMIT_OPTIONS[number];
+const DEFAULT_ACTIVE_SESSION_LIMIT: ActiveSessionLimit = 15;
+
+const getSessionWordsForMode = (
+  words: WordEntry[],
+  mode: ReviewMode,
+  activeSessionLimit: ActiveSessionLimit
+) => mode === 'active' ? words.slice(0, activeSessionLimit) : words;
+
 const ReviewSession: React.FC<ReviewSessionProps> = ({ words, mode, onComplete }) => {
-  const [sessionWords, setSessionWords] = useState<WordEntry[]>(words);
+  const [activeSessionLimit, setActiveSessionLimit] = useState<ActiveSessionLimit>(DEFAULT_ACTIVE_SESSION_LIMIT);
+  const [sessionWords, setSessionWords] = useState<WordEntry[]>(() => getSessionWordsForMode(words, mode, DEFAULT_ACTIVE_SESSION_LIMIT));
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showImage, setShowImage] = useState(false);
@@ -29,8 +40,16 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ words, mode, onComplete }
   const currentWordIdRef = useRef<string | null>(currentWord?.id || null);
 
   useEffect(() => {
-      setSessionWords(words);
-  }, [words]);
+      setSessionWords(getSessionWordsForMode(words, mode, activeSessionLimit));
+      setCurrentIndex(0);
+      setIsPlaying(false);
+      setShowImage(false);
+      setCurrentImage(null);
+      setLoadingImage(false);
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+  }, [words, mode, activeSessionLimit]);
 
   useEffect(() => {
     currentWordIdRef.current = currentWord?.id || null;
@@ -192,6 +211,11 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ words, mode, onComplete }
     }
     setSessionWords([...done, ...upcoming]);
     setIsPlaying(false);
+  };
+
+  const handleSessionLimitChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const nextLimit = Number(event.target.value) as ActiveSessionLimit;
+    setActiveSessionLimit(nextLimit);
   };
 
   const runPassiveSequence = async (word: WordEntry) => {
@@ -375,7 +399,26 @@ const ReviewSession: React.FC<ReviewSessionProps> = ({ words, mode, onComplete }
           <span data-testid="review-progress" className="text-xs font-bold text-brand-400 uppercase tracking-wider">
               {mode === 'passive' ? 'Daily Listen' : 'Active Recall'} • {currentIndex + 1}/{sessionWords.length}
           </span>
-          <div className="flex gap-4">
+          <div className="flex items-center gap-3">
+             {isActiveMode && (
+                <label
+                  className="relative flex h-7 items-center rounded-full border border-brand-100 bg-white pl-2 pr-1 text-brand-500 shadow-sm"
+                  title="Words this Brain Gym round"
+                >
+                  <ListFilter size={14} className="pointer-events-none shrink-0" />
+                  <select
+                    aria-label="Words this Brain Gym round"
+                    value={activeSessionLimit}
+                    onChange={handleSessionLimitChange}
+                    className="h-full cursor-pointer appearance-none bg-transparent pl-1 pr-5 text-[11px] font-black uppercase tracking-wider text-brand-500 outline-none"
+                  >
+                    {ACTIVE_SESSION_LIMIT_OPTIONS.map((limit) => (
+                      <option key={limit} value={limit}>{limit}</option>
+                    ))}
+                  </select>
+                  <ChevronDown size={12} className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-brand-300" />
+                </label>
+             )}
              {currentIndex < sessionWords.length - 1 && (
                 <button onClick={shuffleQueue} className="text-gray-400 hover:text-brand-500 transition-colors">
                     <Shuffle size={16} />
